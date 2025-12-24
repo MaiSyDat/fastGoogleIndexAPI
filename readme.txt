@@ -1,10 +1,10 @@
 === Fast Google Indexing API ===
 Contributors: MaiSyDat
-Tags: google, indexing, seo, api, automation
+Tags: google, indexing, seo, api, automation, search-console
 Requires at least: 5.8
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,25 +17,31 @@ Fast Google Indexing API is a lightweight WordPress plugin that automatically su
 **Key Features:**
 
 * **Automatic Submission**: Automatically submits URLs to Google Indexing API when posts are published or updated
-* **Manual Submission**: Send individual posts to Google with a single click from the post edit screen
+* **Manual Submission**: Send individual posts to Google with a single click from the post edit screen or Console Results page
 * **Bulk Actions**: Submit multiple posts at once from the post list table
 * **Post Type Support**: Choose which post types (Posts, Pages, Products, Custom Post Types) to auto-submit
 * **Action Types**: Support for both URL_UPDATED and URL_DELETED actions
-* **Comprehensive Logging**: View all API responses with status codes and messages
+* **Console Results Dashboard**: View indexed and not-indexed posts with real-time status checking
+* **Auto-Scan**: Automatically scan and verify indexing status of your posts (configurable speed: 20, 50, or 100 posts per hour)
+* **Status Checking**: Verify if Google has actually indexed your URLs using URL Inspection API
+* **Comprehensive Logging**: View all API submissions with status codes and messages
 * **Lightweight**: Uses native PHP for JWT authentication - no heavy dependencies
 * **Secure**: Follows WordPress coding standards with proper nonces, sanitization, and escaping
+* **AJAX-Powered**: Real-time status updates without page reloads
 
 **How It Works:**
 
 1. Configure your Google Cloud Service Account JSON key in the settings
 2. Select which post types should be automatically submitted
 3. The plugin automatically sends URLs to Google Indexing API when content is published or updated
-4. View logs to track all submissions and their status
+4. Enable Auto-Scan to automatically verify indexing status
+5. View Console Results to see which posts are indexed and which need attention
+6. Use "Check Status" to verify if Google has actually indexed your URLs
 
 **Requirements:**
 
-* Google Cloud Project with Indexing API enabled
-* Service Account with Indexing API permissions
+* Google Cloud Project with Indexing API and Search Console API enabled
+* Service Account with Indexing API and Search Console API permissions
 * Service Account JSON key file
 
 == Installation ==
@@ -84,6 +90,18 @@ Go to Google Indexing > Logs to view all API submissions, including status codes
 
 == Changelog ==
 
+= 1.2.0 =
+* Added Console Results dashboard with Indexed/Not Indexed tabs
+* Added Auto-Scan feature to automatically verify indexing status
+* Added Status Checking using Google URL Inspection API
+* Improved submit logic: URLs are marked as indexed immediately after successful submission
+* Added AJAX-powered Index Now and Check Status buttons (no page reload)
+* Optimized database queries with caching
+* Separated JavaScript and CSS into dedicated asset files
+* Improved UI/UX with inline notifications
+* Removed debug code and optimized performance
+* Fixed PHP 8.0+ compatibility issues
+
 = 1.0.0 =
 * Initial release
 * Automatic URL submission on post publish/update
@@ -94,6 +112,9 @@ Go to Google Indexing > Logs to view all API submissions, including status codes
 * Lightweight JWT authentication
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Major update with Console Results dashboard, Auto-Scan feature, and improved performance. Update recommended for all users.
 
 = 1.0.0 =
 Initial release of Fast Google Indexing API plugin.

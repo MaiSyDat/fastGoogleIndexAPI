@@ -32,13 +32,6 @@ class Scheduler {
 	private $indexer;
 
 	/**
-	 * Logger instance.
-	 *
-	 * @var Logger
-	 */
-	private $logger;
-
-	/**
 	 * Get the singleton instance.
 	 *
 	 * @return Scheduler
@@ -55,7 +48,6 @@ class Scheduler {
 	 */
 	private function __construct() {
 		$this->indexer = Indexer::get_instance();
-		$this->logger  = Logger::get_instance();
 
 		// Register custom schedule.
 		add_filter( 'cron_schedules', array( $this, 'add_custom_schedule' ) );
@@ -107,39 +99,78 @@ class Scheduler {
 	 * @return void
 	 */
 	public function run_scheduled_scan() {
+		// Check if auto-scan is enabled.
+		$auto_scan_enabled = get_option( 'fast_google_indexing_auto_scan_enabled', false );
+		if ( ! $auto_scan_enabled ) {
+			return;
+		}
+
 		// Get scan speed setting.
 		$scan_speed = get_option( 'fast_google_indexing_scan_speed', 'medium' );
 		$batch_size = $this->get_batch_size( $scan_speed );
 
-		// Get enabled post types.
-		$enabled_post_types = get_option( 'fast_google_indexing_post_types', array() );
+		// Get enabled post types (cache to avoid repeated option calls in batch).
+		static $cached_enabled_types = null;
+		if ( null === $cached_enabled_types ) {
+			$cached_enabled_types = get_option( 'fast_google_indexing_post_types', array() );
+		}
+		$enabled_post_types = $cached_enabled_types;
+		
 		if ( empty( $enabled_post_types ) || ! is_array( $enabled_post_types ) ) {
 			return;
 		}
 
-		// Query posts that need checking (prioritize oldest/never checked).
+		// Query posts that need checking.
+		// Priority: 1) Posts with status (to re-check), 2) Posts never checked.
+		// First, get posts that have status (prioritize indexed ones to verify they're still indexed).
 		$args = array(
 			'post_type'      => $enabled_post_types,
 			'post_status'    => 'publish',
 			'posts_per_page' => $batch_size,
 			'fields'         => 'ids',
 			'orderby'        => 'meta_value_num',
+			'meta_key'       => '_fgi_last_checked',
 			'order'          => 'ASC',
 			'meta_query'     => array(
-				'relation' => 'OR',
 				array(
-					'key'     => '_fgi_last_checked',
-					'compare' => 'NOT EXISTS',
+					'key'     => '_fgi_google_status',
+					'compare' => 'EXISTS',
 				),
 				array(
 					'key'     => '_fgi_last_checked',
 					'compare' => 'EXISTS',
 				),
 			),
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
 		);
 
 		$query = new \WP_Query( $args );
 		$posts = $query->posts;
+
+		// If we don't have enough posts, get posts that have never been checked.
+		if ( count( $posts ) < $batch_size ) {
+			$remaining = $batch_size - count( $posts );
+			$args = array(
+				'post_type'      => $enabled_post_types,
+				'post_status'    => 'publish',
+				'posts_per_page' => $remaining,
+				'fields'         => 'ids',
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+				'meta_query'     => array(
+					array(
+						'key'     => '_fgi_last_checked',
+						'compare' => 'NOT EXISTS',
+					),
+				),
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			);
+
+			$query2 = new \WP_Query( $args );
+			$posts = array_merge( $posts, $query2->posts );
+		}
 
 		if ( empty( $posts ) ) {
 			return;
@@ -152,31 +183,18 @@ class Scheduler {
 				continue;
 			}
 
-			// Inspect URL.
+			// Inspect URL (this will update post meta automatically).
+			// We don't log inspection results - logs are only for index submissions.
 			$result = $this->indexer->inspect_url( $url, $post_id );
 
+			// If there's an error, we silently continue (no logging for inspections).
+			// The post meta will remain unchanged if inspection fails.
 			if ( is_wp_error( $result ) ) {
-				// Log error but continue processing.
-				$this->logger->log(
-					$url,
-					0,
-					$result->get_error_message(),
-					'URL_INSPECTION',
-					'auto-scan'
-				);
 				continue;
 			}
 
-			// If not indexed, log it.
-			if ( isset( $result['status'] ) && 'URL_NOT_IN_INDEX' === $result['status'] ) {
-				$this->logger->log(
-					$url,
-					200,
-					__( 'URL not indexed (from auto-scan)', 'fast-google-indexing-api' ),
-					'URL_INSPECTION',
-					'auto-scan'
-				);
-			}
+			// Post meta is already updated by inspect_url() method.
+			// No need to log inspection results - logs are only for index submissions.
 		}
 	}
 

@@ -78,11 +78,12 @@ class Admin {
 		add_filter( 'handle_bulk_actions-edit-post', array( $this, 'handle_bulk_action' ), 10, 3 );
 		add_filter( 'handle_bulk_actions-edit-page', array( $this, 'handle_bulk_action' ), 10, 3 );
 
-		// Add Google Status column to post list - hook after init to ensure post types are registered.
-		add_action( 'init', array( $this, 'register_post_list_hooks' ), 20 );
+		// Google Status column removed - only show in Console Results page.
+		// add_action( 'init', array( $this, 'register_post_list_hooks' ), 20 );
 
 		// AJAX handlers.
 		add_action( 'wp_ajax_fgi_check_status', array( $this, 'ajax_check_status' ) );
+		add_action( 'wp_ajax_fgi_submit_url', array( $this, 'ajax_submit_url' ) );
 
 		// Enqueue admin scripts and styles.
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
@@ -119,6 +120,15 @@ class Admin {
 			'fast-google-indexing-api-logs',
 			array( $this, 'render_logs_page' )
 		);
+
+		add_submenu_page(
+			'fast-google-indexing-api',
+			__( 'Console Results', 'fast-google-indexing-api' ),
+			__( 'Console Results', 'fast-google-indexing-api' ),
+			'manage_options',
+			'fast-google-indexing-api-results',
+			array( $this, 'render_results_page' )
+		);
 	}
 
 	/**
@@ -134,6 +144,7 @@ class Admin {
 		$action_type = get_option( 'fast_google_indexing_action_type', 'URL_UPDATED' );
 		$site_url = get_option( 'fast_google_indexing_site_url', '' );
 		$scan_speed = get_option( 'fast_google_indexing_scan_speed', 'medium' );
+		$auto_scan_enabled = get_option( 'fast_google_indexing_auto_scan_enabled', false );
 
 		// Get all registered post types.
 		$registered_post_types = get_post_types( array( 'public' => true ), 'objects' );
@@ -231,6 +242,27 @@ class Admin {
 
 						<tr>
 							<th scope="row">
+								<?php esc_html_e( 'Enable Auto-Scan', 'fast-google-indexing-api' ); ?>
+							</th>
+							<td>
+								<label>
+									<input 
+										type="checkbox" 
+										name="auto_scan_enabled" 
+										id="auto_scan_enabled" 
+										value="1"
+										<?php checked( $auto_scan_enabled, true ); ?>
+									>
+									<?php esc_html_e( 'Enable automated background scanning of posts', 'fast-google-indexing-api' ); ?>
+								</label>
+								<p class="description">
+									<?php esc_html_e( 'When enabled, the plugin will automatically check post indexing status in the background.', 'fast-google-indexing-api' ); ?>
+								</p>
+							</td>
+						</tr>
+
+						<tr id="scan_speed_row"<?php echo $auto_scan_enabled ? '' : ' class="fgi-hidden"'; ?>>
+							<th scope="row">
 								<label for="scan_speed"><?php esc_html_e( 'Auto-Scan Speed', 'fast-google-indexing-api' ); ?></label>
 							</th>
 							<td>
@@ -278,7 +310,7 @@ class Admin {
 		$per_page = 20;
 
 		// Get logs based on tab.
-		$source_filter = 'all' === $current_tab ? 'all' : $current_tab;
+		$source_filter = 'all' === $current_tab ? '' : $current_tab;
 		$logs = $this->logger->get_logs( $per_page, $current_page, $source_filter );
 		$total_logs = $this->logger->get_logs_count( $source_filter );
 		$total_pages = ceil( $total_logs / $per_page );
@@ -293,8 +325,55 @@ class Admin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Google Indexing Logs', 'fast-google-indexing-api' ); ?></h1>
 
+			<?php
+			// Auto-cleanup invalid log sources on page load (one-time cleanup).
+			$cleanup_done = get_transient( 'fgi_logs_cleanup_done' );
+			if ( false === $cleanup_done ) {
+				$cleaned = $this->logger->cleanup_invalid_sources();
+				if ( $cleaned > 0 ) {
+					echo '<div class="notice notice-info is-dismissible"><p>';
+					printf(
+						/* translators: %d: number of logs cleaned */
+						esc_html__( 'Cleaned up %d invalid log entries (inspection logs that should not be stored).', 'fast-google-indexing-api' ),
+						$cleaned
+					);
+					echo '</p></div>';
+				}
+				set_transient( 'fgi_logs_cleanup_done', true, DAY_IN_SECONDS );
+			}
+
+			// Check for recent 403 errors and show warning.
+			$recent_403_count = $this->logger->get_recent_403_errors_count();
+			if ( $recent_403_count > 0 ) {
+				?>
+				<div class="notice notice-warning is-dismissible">
+					<p>
+						<strong><?php esc_html_e( 'Warning:', 'fast-google-indexing-api' ); ?></strong>
+						<?php
+						printf(
+							/* translators: %d: number of 403 errors */
+							esc_html__( 'Found %d recent 403 Permission Denied errors. This usually means:', 'fast-google-indexing-api' ),
+							$recent_403_count
+						);
+						?>
+					</p>
+					<ul style="list-style: disc; margin-left: 20px;">
+						<li><?php esc_html_e( 'Site URL in Settings does not match your Google Search Console property URL', 'fast-google-indexing-api' ); ?></li>
+						<li><?php esc_html_e( 'Service account does not have access to the Search Console property', 'fast-google-indexing-api' ); ?></li>
+						<li><?php esc_html_e( 'Site URL must end with a trailing slash (/) for URL-Prefix properties', 'fast-google-indexing-api' ); ?></li>
+					</ul>
+					<p>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=fast-google-indexing-api' ) ); ?>">
+							<?php esc_html_e( 'Check Settings', 'fast-google-indexing-api' ); ?>
+						</a>
+					</p>
+				</div>
+				<?php
+			}
+			?>
+
 			<?php if ( ! empty( $logs ) ) : ?>
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom: 20px;">
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fgi-logs-form">
 					<?php wp_nonce_field( 'fast_google_indexing_clear_logs', 'fast_google_indexing_nonce' ); ?>
 					<input type="hidden" name="action" value="fast_google_indexing_clear_logs">
 					<?php submit_button( __( 'Clear All Logs', 'fast-google-indexing-api' ), 'delete', 'clear_logs', false ); ?>
@@ -304,7 +383,7 @@ class Admin {
 					<li class="all">
 						<a href="<?php echo esc_url( $all_url ); ?>" class="<?php echo 'all' === $current_tab ? 'current' : ''; ?>">
 							<?php esc_html_e( 'All', 'fast-google-indexing-api' ); ?>
-							<span class="count">(<?php echo esc_html( $this->logger->get_logs_count( 'all' ) ); ?>)</span>
+							<span class="count">(<?php echo esc_html( $this->logger->get_logs_count( '' ) ); ?>)</span>
 						</a> |
 					</li>
 					<li class="auto">
@@ -349,11 +428,8 @@ class Admin {
 								<td>
 									<?php
 									$status_code = intval( $log['status_code'] );
-									if ( 200 === $status_code ) {
-										echo '<span style="color: green;">' . esc_html( $status_code ) . '</span>';
-									} else {
-										echo '<span style="color: red;">' . esc_html( $status_code ) . '</span>';
-									}
+									$status_class = ( 200 === $status_code ) ? 'fgi-status-code-success' : 'fgi-status-code-error';
+									echo '<span class="' . esc_attr( $status_class ) . '">' . esc_html( $status_code ) . '</span>';
 									?>
 								</td>
 								<td><?php echo esc_html( $log['message'] ); ?></td>
@@ -382,6 +458,281 @@ class Admin {
 				<?php endif; ?>
 			<?php else : ?>
 				<p><?php esc_html_e( 'No logs found.', 'fast-google-indexing-api' ); ?></p>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render Console Results page with tabs and filters.
+	 */
+	public function render_results_page() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'fast-google-indexing-api' ) );
+		}
+
+		// Show admin notices for success/error.
+		if ( isset( $_GET['google_indexed'] ) && '1' === $_GET['google_indexed'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'URL submitted to Google Indexing API successfully.', 'fast-google-indexing-api' ) . '</p></div>';
+		}
+		if ( isset( $_GET['google_indexed_error'] ) && '1' === $_GET['google_indexed_error'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to submit URL to Google Indexing API. Please check the logs.', 'fast-google-indexing-api' ) . '</p></div>';
+		}
+
+		// Get current tab (indexed or not_indexed).
+		$current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'indexed'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$valid_tabs = array( 'indexed', 'not_indexed' );
+		if ( ! in_array( $current_tab, $valid_tabs, true ) ) {
+			$current_tab = 'indexed';
+		}
+
+		// Get enabled post types (use static cache to avoid repeated option calls).
+		static $cached_enabled_types = null;
+		if ( null === $cached_enabled_types ) {
+			$cached_enabled_types = get_option( 'fast_google_indexing_post_types', array() );
+		}
+		$enabled_post_types = $cached_enabled_types;
+
+		// Get pagination.
+		$current_page = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$per_page = 20;
+
+		// Build query args with optimizations.
+		// Ensure we have valid post types.
+		if ( empty( $enabled_post_types ) || ! is_array( $enabled_post_types ) ) {
+			$post_types_for_query = array( 'post' ); // Fallback to post.
+		} else {
+			$post_types_for_query = $enabled_post_types;
+		}
+		
+		$query_args = array(
+			'post_type'      => $post_types_for_query,
+			'post_status'    => 'publish',
+			'posts_per_page' => $per_page,
+			'paged'          => $current_page,
+			'meta_query'     => array(),
+			'update_post_meta_cache' => true, // Enable meta cache for batch loading.
+			'update_post_term_cache' => false, // Not needed for this query.
+			'no_found_rows'  => false, // We need found_posts for pagination.
+		);
+
+		// Add status filter based on tab.
+		if ( 'indexed' === $current_tab ) {
+			// Indexed: Posts that have been submitted to Google (đã submit lên Google).
+			// Status = URL_IN_INDEX means the URL has been submitted successfully.
+			// Note: This doesn't mean Google has confirmed indexing, just that submission was successful.
+			// Use "Check Status" button to verify if Google has actually indexed the URL.
+			$query_args['meta_query'] = array(
+				'relation' => 'AND',
+				array(
+					'key'     => '_fgi_last_checked',
+					'compare' => 'EXISTS',
+				),
+				array(
+					'key'   => '_fgi_google_status',
+					'value' => 'URL_IN_INDEX',
+				),
+			);
+		} else {
+			// Not indexed: Posts that have NOT been submitted to Google (chưa submit).
+			// This includes: posts never submitted, posts rejected by Google, or posts with unknown status.
+			$query_args['meta_query'] = array(
+				'relation' => 'OR',
+				// Posts with status = URL_NOT_IN_INDEX (rejected).
+				array(
+					'key'   => '_fgi_google_status',
+					'value' => 'URL_NOT_IN_INDEX',
+				),
+				// Posts with no status (never checked or unknown).
+				array(
+					'key'     => '_fgi_google_status',
+					'compare' => 'NOT EXISTS',
+				),
+				// Posts with empty status.
+				array(
+					'key'   => '_fgi_google_status',
+					'value' => '',
+				),
+			);
+		}
+
+		// Query posts.
+		$query = new \WP_Query( $query_args );
+		$posts = $query->posts;
+		$total_posts = $query->found_posts;
+		$total_pages = $query->max_num_pages;
+
+		// Build URLs.
+		$base_url = admin_url( 'admin.php?page=fast-google-indexing-api-results' );
+		
+		// Build tab URLs.
+		$indexed_url = add_query_arg( array( 'tab' => 'indexed' ), $base_url );
+		$not_indexed_url = add_query_arg( array( 'tab' => 'not_indexed' ), $base_url );
+
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Console Results', 'fast-google-indexing-api' ); ?></h1>
+
+			<?php if ( empty( $enabled_post_types ) ) : ?>
+				<div class="notice notice-warning">
+					<p><?php esc_html_e( 'No post types are enabled. Please configure post types in Settings.', 'fast-google-indexing-api' ); ?></p>
+				</div>
+			<?php else : ?>
+
+				<!-- Tabs -->
+				<ul class="subsubsub">
+					<li class="indexed">
+						<a href="<?php echo esc_url( $indexed_url ); ?>" class="<?php echo 'indexed' === $current_tab ? 'current' : ''; ?>">
+							<?php esc_html_e( 'Indexed', 'fast-google-indexing-api' ); ?>
+						</a> |
+					</li>
+					<li class="not-indexed">
+						<a href="<?php echo esc_url( $not_indexed_url ); ?>" class="<?php echo 'not_indexed' === $current_tab ? 'current' : ''; ?>">
+							<?php esc_html_e( 'Not Indexed', 'fast-google-indexing-api' ); ?>
+						</a>
+					</li>
+				</ul>
+
+				<br class="clear">
+
+				<!-- Results Table -->
+				<?php if ( ! empty( $posts ) ) : ?>
+					<table class="wp-list-table widefat fixed striped">
+						<thead>
+							<tr>
+								<th scope="col" style="width: 50px;"><?php esc_html_e( 'No.', 'fast-google-indexing-api' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Title', 'fast-google-indexing-api' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Post Type', 'fast-google-indexing-api' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Status', 'fast-google-indexing-api' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Last Checked', 'fast-google-indexing-api' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Actions', 'fast-google-indexing-api' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php
+							// Calculate starting number for pagination.
+							$start_number = ( ( $current_page - 1 ) * $per_page ) + 1;
+							$counter = $start_number;
+							
+							// Batch load post meta to reduce database queries.
+							$post_ids = wp_list_pluck( $posts, 'ID' );
+							// Load meta in batch (update_postmeta_cache loads all meta for these posts).
+							update_postmeta_cache( $post_ids );
+							
+							// Cache post type objects to avoid repeated calls.
+							$post_type_cache = array();
+							
+							foreach ( $posts as $post ) :
+								// Get meta from cache (update_postmeta_cache makes get_post_meta use cache).
+								$status = get_post_meta( $post->ID, '_fgi_google_status', true );
+								$last_checked = get_post_meta( $post->ID, '_fgi_last_checked', true );
+								
+								// Cache post type objects.
+								if ( ! isset( $post_type_cache[ $post->post_type ] ) ) {
+									$post_type_cache[ $post->post_type ] = get_post_type_object( $post->post_type );
+								}
+								$post_type_obj = $post_type_cache[ $post->post_type ];
+								
+								$edit_url = get_edit_post_link( $post->ID );
+								$permalink = get_permalink( $post->ID );
+							?>
+								<tr>
+									<td>
+										<?php echo esc_html( $counter ); ?>
+									</td>
+									<td>
+										<strong>
+											<a href="<?php echo esc_url( $edit_url ); ?>">
+												<?php echo esc_html( $post->post_title ); ?>
+											</a>
+										</strong>
+									</td>
+									<td>
+										<?php echo esc_html( $post_type_obj ? $post_type_obj->label : $post->post_type ); ?>
+									</td>
+									<td>
+										<?php if ( 'URL_IN_INDEX' === $status ) : ?>
+											<span class="fgi-status-indexed" title="<?php esc_attr_e( 'Indexed', 'fast-google-indexing-api' ); ?>">
+												<span class="dashicons dashicons-yes-alt"></span>
+												<?php esc_html_e( 'Indexed', 'fast-google-indexing-api' ); ?>
+											</span>
+										<?php elseif ( 'URL_NOT_IN_INDEX' === $status ) : ?>
+											<span class="fgi-status-not-indexed" title="<?php esc_attr_e( 'Not indexed', 'fast-google-indexing-api' ); ?>">
+												<span class="dashicons dashicons-dismiss"></span>
+												<?php esc_html_e( 'Not Indexed', 'fast-google-indexing-api' ); ?>
+											</span>
+										<?php else : ?>
+											<span class="fgi-status-unknown" title="<?php esc_attr_e( 'Not checked yet', 'fast-google-indexing-api' ); ?>">
+												<span class="dashicons dashicons-minus"></span>
+												<?php esc_html_e( 'Unknown', 'fast-google-indexing-api' ); ?>
+											</span>
+										<?php endif; ?>
+									</td>
+									<td>
+										<?php
+										if ( ! empty( $last_checked ) ) {
+											echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $last_checked ) );
+										} else {
+											echo '<span class="fgi-text-muted">' . esc_html__( 'Never', 'fast-google-indexing-api' ) . '</span>';
+										}
+										?>
+									</td>
+									<td>
+										<?php if ( $permalink ) : ?>
+											<button 
+												type="button" 
+												class="button button-small fgi-submit-url-btn fgi-action-buttons" 
+												data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+												data-action-type="URL_UPDATED"
+											>
+												<?php esc_html_e( 'Index Now', 'fast-google-indexing-api' ); ?>
+											</button>
+											<button 
+												type="button" 
+												class="button button-small fgi-check-status-btn fgi-action-buttons" 
+												data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+											>
+												<?php esc_html_e( 'Check Status', 'fast-google-indexing-api' ); ?>
+											</button>
+										<?php endif; ?>
+									</td>
+								</tr>
+							<?php
+								$counter++;
+							endforeach;
+							?>
+						</tbody>
+					</table>
+
+					<?php if ( $total_pages > 1 ) : ?>
+						<div class="tablenav">
+							<div class="tablenav-pages">
+								<?php
+								$paged_params = array(
+									'tab'   => $current_tab,
+									'paged' => '%#%',
+								);
+								$paged_url = add_query_arg( $paged_params, $base_url );
+								
+								echo paginate_links(
+									array(
+										'base'      => $paged_url,
+										'format'    => '',
+										'current'   => $current_page,
+										'total'     => $total_pages,
+										'prev_text' => '&laquo;',
+										'next_text' => '&raquo;',
+									)
+								);
+								?>
+							</div>
+						</div>
+					<?php endif; ?>
+
+				<?php else : ?>
+					<p><?php esc_html_e( 'No posts found.', 'fast-google-indexing-api' ); ?></p>
+				<?php endif; ?>
+
 			<?php endif; ?>
 		</div>
 		<?php
@@ -429,6 +780,10 @@ class Admin {
 				update_option( 'fast_google_indexing_action_type', $action_type );
 			}
 		}
+
+		// Save auto-scan enabled.
+		$auto_scan_enabled = isset( $_POST['auto_scan_enabled'] ) && '1' === $_POST['auto_scan_enabled'];
+		update_option( 'fast_google_indexing_auto_scan_enabled', $auto_scan_enabled );
 
 		// Save scan speed.
 		if ( isset( $_POST['scan_speed'] ) ) {
@@ -503,6 +858,7 @@ class Admin {
 		$status = get_post_meta( $post_id, '_fgi_google_status', true );
 		$last_checked = get_post_meta( $post_id, '_fgi_last_checked', true );
 
+		// Show status icon.
 		if ( empty( $status ) ) {
 			?>
 			<span class="fgi-status-unknown" title="<?php esc_attr_e( 'Not checked yet', 'fast-google-indexing-api' ); ?>">
@@ -511,17 +867,20 @@ class Admin {
 			<?php
 		} elseif ( 'URL_IN_INDEX' === $status ) {
 			?>
-			<span class="fgi-status-indexed" style="color: green;" title="<?php esc_attr_e( 'Indexed', 'fast-google-indexing-api' ); ?>">
+			<span class="fgi-status-indexed" title="<?php esc_attr_e( 'Indexed', 'fast-google-indexing-api' ); ?>">
 				<span class="dashicons dashicons-yes-alt"></span>
 			</span>
 			<?php
 		} else {
 			?>
-			<span class="fgi-status-not-indexed" style="color: red;" title="<?php esc_attr_e( 'Not indexed', 'fast-google-indexing-api' ); ?>">
+			<span class="fgi-status-not-indexed" title="<?php esc_attr_e( 'Not indexed', 'fast-google-indexing-api' ); ?>">
 				<span class="dashicons dashicons-dismiss"></span>
 			</span>
 			<?php
-			// Show "Index Now" button.
+		}
+
+		// Only show buttons if post hasn't been checked yet.
+		if ( empty( $last_checked ) ) {
 			$url = get_permalink( $post_id );
 			if ( $url ) {
 				$submit_url = wp_nonce_url(
@@ -531,25 +890,22 @@ class Admin {
 				);
 				?>
 				<br>
-				<a href="<?php echo esc_url( $submit_url ); ?>" class="button button-small" style="margin-top: 5px;">
+				<a href="<?php echo esc_url( $submit_url ); ?>" class="button button-small fgi-action-buttons">
 					<?php esc_html_e( 'Index Now', 'fast-google-indexing-api' ); ?>
 				</a>
 				<?php
 			}
+			?>
+			<br>
+			<button 
+				type="button" 
+				class="button button-small fgi-check-status-btn fgi-action-buttons" 
+				data-post-id="<?php echo esc_attr( $post_id ); ?>"
+			>
+				<?php esc_html_e( 'Check Status', 'fast-google-indexing-api' ); ?>
+			</button>
+			<?php
 		}
-
-		// Show "Check Status" button.
-		?>
-		<br>
-		<button 
-			type="button" 
-			class="button button-small fgi-check-status-btn" 
-			data-post-id="<?php echo esc_attr( $post_id ); ?>"
-			style="margin-top: 5px;"
-		>
-			<?php esc_html_e( 'Check Status', 'fast-google-indexing-api' ); ?>
-		</button>
-		<?php
 	}
 
 	/**
@@ -576,7 +932,7 @@ class Admin {
 			wp_send_json_error( array( 'message' => __( 'Invalid post URL.', 'fast-google-indexing-api' ) ) );
 		}
 
-		// Inspect URL.
+		// Inspect URL (this will update post meta automatically).
 		$result = $this->indexer->inspect_url( $url, $post_id );
 
 		if ( is_wp_error( $result ) ) {
@@ -587,19 +943,81 @@ class Admin {
 			);
 		}
 
-		// Log the inspection.
-		$this->logger->log(
-			$url,
-			200,
-			__( 'Status checked manually', 'fast-google-indexing-api' ),
-			'URL_INSPECTION',
-			'manual'
-		);
+		// Don't log inspection results - logs are only for index submissions.
+		// Post meta is already updated by inspect_url() method.
+		
+		// Get the updated status from post meta (inspect_url updates it).
+		$status = get_post_meta( $post_id, '_fgi_google_status', true );
+		$last_checked = get_post_meta( $post_id, '_fgi_last_checked', true );
+		
+		// If status from meta is empty, try to get from result array.
+		if ( empty( $status ) && isset( $result['status'] ) ) {
+			$status = $result['status'];
+		}
+
+		// Build message based on status.
+		$message = '';
+		if ( 'URL_IN_INDEX' === $status ) {
+			$message = __( 'URL is indexed in Google.', 'fast-google-indexing-api' );
+		} elseif ( 'URL_NOT_IN_INDEX' === $status ) {
+			$message = __( 'URL is not indexed in Google.', 'fast-google-indexing-api' );
+		} else {
+			$message = __( 'Status check completed, but result is unknown. Please check Google Search Console manually.', 'fast-google-indexing-api' );
+		}
 
 		wp_send_json_success(
 			array(
-				'status' => $result['status'],
-				'message' => 'URL_IN_INDEX' === $result['status'] ? __( 'URL is indexed', 'fast-google-indexing-api' ) : __( 'URL is not indexed', 'fast-google-indexing-api' ),
+				'status' => $status,
+				'last_checked' => $last_checked,
+				'message' => $message,
+			)
+		);
+	}
+
+	/**
+	 * AJAX handler for submitting URL to Google.
+	 *
+	 * @return void
+	 */
+	public function ajax_submit_url() {
+		check_ajax_referer( 'fgi_submit_url', 'nonce' );
+
+		$post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+		$action_type = isset( $_POST['action_type'] ) ? sanitize_text_field( wp_unslash( $_POST['action_type'] ) ) : 'URL_UPDATED';
+
+		if ( ! $post_id ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fast-google-indexing-api' ) ) );
+		}
+
+		// Check permissions.
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'You do not have permission to edit this post.', 'fast-google-indexing-api' ) ) );
+		}
+
+		// Get post URL.
+		$url = get_permalink( $post_id );
+		if ( ! $url ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post URL.', 'fast-google-indexing-api' ) ) );
+		}
+
+		// Submit to Google.
+		$result = $this->indexer->submit_url( $url, $action_type, 'manual', $post_id );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		// Get updated status from post meta.
+		$status = get_post_meta( $post_id, '_fgi_google_status', true );
+		$last_checked = get_post_meta( $post_id, '_fgi_last_checked', true );
+
+		$message = $result ? __( 'URL submitted to Google successfully.', 'fast-google-indexing-api' ) : __( 'Failed to submit URL to Google.', 'fast-google-indexing-api' );
+
+		wp_send_json_success(
+			array(
+				'status' => $status,
+				'last_checked' => $last_checked,
+				'message' => $message,
 			)
 		);
 	}
@@ -652,26 +1070,10 @@ class Admin {
 				'fast_google_indexing_nonce'
 			);
 			?>
-			<a href="<?php echo esc_url( $base_url ); ?>" class="button button-primary" id="fast-google-indexing-submit-btn">
+			<a href="<?php echo esc_url( $base_url ); ?>" class="button button-primary" id="fast-google-indexing-submit-btn" data-action-type-select="fast_google_indexing_action_type">
 				<?php esc_html_e( 'Send to Google', 'fast-google-indexing-api' ); ?>
 			</a>
 		</p>
-		<script>
-		(function() {
-			var btn = document.getElementById('fast-google-indexing-submit-btn');
-			var select = document.getElementById('fast_google_indexing_action_type');
-			if (btn && select) {
-				btn.addEventListener('click', function(e) {
-					var actionType = select.value;
-					var url = btn.getAttribute('href');
-					if (url.indexOf('action_type=') === -1) {
-						url += '&action_type=' + encodeURIComponent(actionType);
-						btn.setAttribute('href', url);
-					}
-				});
-			}
-		})();
-		</script>
 		<?php
 	}
 
@@ -683,7 +1085,13 @@ class Admin {
 	 * @return array Modified actions.
 	 */
 	public function add_row_action( $actions, $post ) {
-		$enabled_post_types = get_option( 'fast_google_indexing_post_types', array() );
+		// Cache enabled post types to avoid repeated option calls.
+		static $cached_enabled_types = null;
+		if ( null === $cached_enabled_types ) {
+			$cached_enabled_types = get_option( 'fast_google_indexing_post_types', array() );
+		}
+		$enabled_post_types = $cached_enabled_types;
+		
 		if ( in_array( $post->post_type, (array) $enabled_post_types, true ) && 'publish' === $post->post_status ) {
 			$url = wp_nonce_url(
 				admin_url( 'admin-post.php?action=fast_google_indexing_submit_url&post_id=' . intval( $post->ID ) ),
@@ -725,7 +1133,7 @@ class Admin {
 			if ( $post && 'publish' === $post->post_status ) {
 				$url = get_permalink( $post_id );
 				if ( $url ) {
-					$this->indexer->submit_url( $url, 'URL_UPDATED', 'manual' );
+					$this->indexer->submit_url( $url, 'URL_UPDATED', 'manual', $post_id );
 					$count++;
 				}
 			}
@@ -770,11 +1178,14 @@ class Admin {
 		}
 
 		// Submit to Google.
-		$this->indexer->submit_url( $url, $action_type, 'manual' );
+		$result = $this->indexer->submit_url( $url, $action_type, 'manual', $post_id );
 
-		// Redirect back to post edit screen or list.
+		// Redirect back to the page that called this action.
 		$redirect_url = isset( $_GET['redirect'] ) ? esc_url_raw( wp_unslash( $_GET['redirect'] ) ) : admin_url( 'edit.php?post_type=' . get_post_type( $post_id ) );
-		wp_safe_redirect( add_query_arg( 'google_indexed', '1', $redirect_url ) );
+		
+		// Add success/error message parameter.
+		$message_param = is_wp_error( $result ) ? 'google_indexed_error' : 'google_indexed';
+		wp_safe_redirect( add_query_arg( $message_param, '1', $redirect_url ) );
 		exit;
 	}
 
@@ -785,54 +1196,54 @@ class Admin {
 	 */
 	public function enqueue_admin_assets( $hook ) {
 		// Only load on our plugin pages, post edit screens, and post list screens.
-		$allowed_hooks = array( 'toplevel_page_fast-google-indexing-api', 'google-indexing_page_fast-google-indexing-api-logs' );
+		$allowed_hooks = array( 
+			'toplevel_page_fast-google-indexing-api', 
+			'google-indexing_page_fast-google-indexing-api-logs',
+			'google-indexing_page_fast-google-indexing-api-results'
+		);
 		$is_post_screen = in_array( $hook, array( 'post.php', 'post-new.php', 'edit.php' ), true );
 
 		if ( ! in_array( $hook, $allowed_hooks, true ) && ! $is_post_screen ) {
 			return;
 		}
 
-		// Enqueue script for AJAX functionality on post list.
-		if ( 'edit.php' === $hook ) {
-			wp_enqueue_script( 'jquery' );
-			wp_add_inline_script(
-				'jquery',
-				"
-				jQuery(document).ready(function($) {
-					$('.fgi-check-status-btn').on('click', function(e) {
-						e.preventDefault();
-						var btn = $(this);
-						var postId = btn.data('post-id');
-						var originalText = btn.text();
-						
-						btn.prop('disabled', true).text('" . esc_js( __( 'Checking...', 'fast-google-indexing-api' ) ) . "');
-						
-						$.ajax({
-							url: ajaxurl,
-							type: 'POST',
-							data: {
-								action: 'fgi_check_status',
-								nonce: '" . wp_create_nonce( 'fgi_check_status' ) . "',
-								post_id: postId
-							},
-							success: function(response) {
-								if (response.success) {
-									alert(response.data.message);
-									location.reload();
-								} else {
-									alert(response.data.message || 'Error checking status');
-								}
-								btn.prop('disabled', false).text(originalText);
-							},
-							error: function() {
-								alert('Request failed');
-								btn.prop('disabled', false).text(originalText);
-							}
-						});
-					});
-				});
-				"
+		// Enqueue admin CSS.
+		wp_enqueue_style(
+			'fast-google-indexing-admin',
+			FAST_GOOGLE_INDEXING_API_URL . 'assets/css/admin.css',
+			array(),
+			FAST_GOOGLE_INDEXING_API_VERSION
+		);
+
+		// Enqueue admin JavaScript for settings page and AJAX functionality.
+		if ( 'toplevel_page_fast-google-indexing-api' === $hook || 'edit.php' === $hook || 'google-indexing_page_fast-google-indexing-api-results' === $hook ) {
+			wp_enqueue_script(
+				'fast-google-indexing-admin',
+				FAST_GOOGLE_INDEXING_API_URL . 'assets/js/admin.js',
+				array( 'jquery' ),
+				FAST_GOOGLE_INDEXING_API_VERSION,
+				true
 			);
+
+			// Localize script for AJAX functionality (only on results page).
+			if ( 'google-indexing_page_fast-google-indexing-api-results' === $hook ) {
+				wp_localize_script(
+					'fast-google-indexing-admin',
+					'fgiAdmin',
+					array(
+						'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
+						'checkStatusNonce' => wp_create_nonce( 'fgi_check_status' ),
+						'submitUrlNonce' => wp_create_nonce( 'fgi_submit_url' ),
+						'checkingText'   => __( 'Checking...', 'fast-google-indexing-api' ),
+						'submittingText' => __( 'Submitting...', 'fast-google-indexing-api' ),
+						'errorText'      => __( 'An error occurred.', 'fast-google-indexing-api' ),
+						'requestFailedText' => __( 'Request failed. Please try again.', 'fast-google-indexing-api' ),
+						'timeoutText'    => __( 'Request timed out. Please try again.', 'fast-google-indexing-api' ),
+						'indexedText'    => __( 'Indexed', 'fast-google-indexing-api' ),
+						'notIndexedText' => __( 'Not Indexed', 'fast-google-indexing-api' ),
+					)
+				);
+			}
 		}
 	}
 

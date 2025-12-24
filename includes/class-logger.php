@@ -118,13 +118,13 @@ class Logger {
 	public function log( $url, $status_code, $message, $action_type = 'URL_UPDATED', $source = 'auto' ) {
 		global $wpdb;
 
-		// Validate source.
-		$valid_sources = array( 'auto', 'auto-scan', 'manual' );
+		// Validate source (only 'auto' and 'manual' are valid - logs are only for index submissions).
+		$valid_sources = array( 'auto', 'manual' );
 		if ( ! in_array( $source, $valid_sources, true ) ) {
 			$source = 'auto';
 		}
 
-		$wpdb->insert(
+		$result = $wpdb->insert(
 			$this->table_name,
 			array(
 				'url'         => sanitize_text_field( $url ),
@@ -135,6 +135,14 @@ class Logger {
 			),
 			array( '%s', '%d', '%s', '%s', '%s' )
 		);
+
+		// Clear cache when new log is added.
+		if ( false !== $result ) {
+			delete_transient( 'fgi_logs_count_' . md5( '' ) );
+			delete_transient( 'fgi_logs_count_' . md5( $source ) );
+		}
+
+		return $result;
 	}
 
 	/**
@@ -142,7 +150,7 @@ class Logger {
 	 *
 	 * @param int    $per_page Number of logs per page.
 	 * @param int    $page     Current page.
-	 * @param string $source   Optional source filter ('auto', 'auto-scan', 'manual', or empty for all).
+	 * @param string $source   Optional source filter ('auto' or 'manual', or empty for all).
 	 * @return array Array of log entries.
 	 */
 	public function get_logs( $per_page = 20, $page = 1, $source = '' ) {
@@ -181,20 +189,33 @@ class Logger {
 	/**
 	 * Get total number of logs with optional source filter.
 	 *
-	 * @param string $source Optional source filter.
+	 * @param string $source Optional source filter ('auto' or 'manual').
 	 * @return int Total count.
 	 */
 	public function get_logs_count( $source = '' ) {
 		global $wpdb;
 
+		// Cache key for transient.
+		$cache_key = 'fgi_logs_count_' . md5( $source );
+		$cached = get_transient( $cache_key );
+		
+		if ( false !== $cached ) {
+			return (int) $cached;
+		}
+
 		if ( empty( $source ) ) {
 			// No source filter - run query directly without prepare().
-			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_name}" );
+			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_name}" );
 		} else {
 			// Source filter provided - use prepare() with WHERE clause.
 			$query = "SELECT COUNT(*) FROM {$this->table_name} WHERE source = %s";
-			return (int) $wpdb->get_var( $wpdb->prepare( $query, $source ) );
+			$count = (int) $wpdb->get_var( $wpdb->prepare( $query, $source ) );
 		}
+
+		// Cache for 5 minutes.
+		set_transient( $cache_key, $count, 5 * MINUTE_IN_SECONDS );
+
+		return $count;
 	}
 
 	/**
@@ -205,7 +226,68 @@ class Logger {
 	public function clear_logs() {
 		global $wpdb;
 
-		return $wpdb->query( "TRUNCATE TABLE {$this->table_name}" );
+		$result = $wpdb->query( "TRUNCATE TABLE {$this->table_name}" );
+
+		// Clear all count caches.
+		if ( false !== $result ) {
+			delete_transient( 'fgi_logs_count_' . md5( '' ) );
+			delete_transient( 'fgi_logs_count_' . md5( 'auto' ) );
+			delete_transient( 'fgi_logs_count_' . md5( 'manual' ) );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Clean up invalid log sources (like 'auto-scan' which should not be logged).
+	 * This is a one-time cleanup for old logs.
+	 *
+	 * @return int Number of logs cleaned up.
+	 */
+	public function cleanup_invalid_sources() {
+		global $wpdb;
+
+		// Delete logs with invalid sources (like 'auto-scan').
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$this->table_name} WHERE source NOT IN (%s, %s)",
+				'auto',
+				'manual'
+			)
+		);
+
+		// Clear all count caches after cleanup.
+		if ( false !== $deleted ) {
+			delete_transient( 'fgi_logs_count_' . md5( '' ) );
+			delete_transient( 'fgi_logs_count_' . md5( 'auto' ) );
+			delete_transient( 'fgi_logs_count_' . md5( 'manual' ) );
+		}
+
+		return (int) $deleted;
+	}
+
+	/**
+	 * Get count of recent 403 errors (last 24 hours).
+	 *
+	 * @return int Count of 403 errors.
+	 */
+	public function get_recent_403_errors_count() {
+		global $wpdb;
+
+		// Check for logs with status_code 0 and message containing 403 or PERMISSION_DENIED in last 24 hours.
+		$query = "SELECT COUNT(*) FROM {$this->table_name} 
+			WHERE (status_code = 0 OR message LIKE %s OR message LIKE %s) 
+			AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)";
+		
+		$count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				$query,
+				'%403%',
+				'%PERMISSION_DENIED%'
+			)
+		);
+
+		return $count;
 	}
 
 	/**

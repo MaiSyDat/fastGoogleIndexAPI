@@ -3,7 +3,7 @@
  * Plugin Name: Fast Google Indexing API
  * Plugin URI: https://wordpress.org/plugins/fast-google-indexing-api
  * Description: Automatically submit post URLs to Google Indexing API when content is published or updated. Lightweight and secure.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: MaiSyDat
  * Author URI: https://hupuna.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if ( ! defined( 'WPINC' ) ) {
 /**
  * Current plugin version.
  */
-define( 'FAST_GOOGLE_INDEXING_API_VERSION', '1.1.0' );
+define( 'FAST_GOOGLE_INDEXING_API_VERSION', '1.2.0' );
 
 /**
  * Plugin directory path.

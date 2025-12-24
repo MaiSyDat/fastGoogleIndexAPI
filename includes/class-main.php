@@ -118,8 +118,13 @@ class Main {
 			return;
 		}
 
-		// Get enabled post types from settings.
-		$enabled_post_types = get_option( 'fast_google_indexing_post_types', array() );
+		// Get enabled post types from settings (cache to reduce option calls).
+		static $cached_enabled_types = null;
+		if ( null === $cached_enabled_types ) {
+			$cached_enabled_types = get_option( 'fast_google_indexing_post_types', array() );
+		}
+		$enabled_post_types = $cached_enabled_types;
+		
 		if ( empty( $enabled_post_types ) || ! is_array( $enabled_post_types ) ) {
 			return;
 		}
@@ -129,11 +134,14 @@ class Main {
 			return;
 		}
 
-		// Determine action type based on old status.
-		$action_type = ( 'publish' === $old_status ) ? 'URL_UPDATED' : 'URL_UPDATED';
+		// Get permalink (cache it to avoid multiple calls).
+		$permalink = get_permalink( $post->ID );
+		if ( ! $permalink ) {
+			return;
+		}
 
-		// Submit to Google Indexing API.
-		$this->indexer->submit_url( get_permalink( $post->ID ), $action_type, 'auto' );
+		// Submit to Google Indexing API (always use URL_UPDATED for publish/update).
+		$this->indexer->submit_url( $permalink, 'URL_UPDATED', 'auto', $post->ID );
 	}
 
 	/**

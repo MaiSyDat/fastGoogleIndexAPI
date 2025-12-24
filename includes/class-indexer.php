@@ -77,26 +77,35 @@ class Indexer {
 	 * @param string $url        The URL to submit.
 	 * @param string $action_type Action type: 'URL_UPDATED' or 'URL_DELETED'.
 	 * @param string $source     Source of submission (default: 'manual').
+	 * @param int    $post_id    Optional post ID to track submission timestamp.
 	 * @return bool|\WP_Error True on success, WP_Error on failure.
 	 */
-	public function submit_url( $url, $action_type = 'URL_UPDATED', $source = 'manual' ) {
+	public function submit_url( $url, $action_type = 'URL_UPDATED', $source = 'manual', $post_id = 0 ) {
 		// Validate action type.
 		if ( ! in_array( $action_type, array( 'URL_UPDATED', 'URL_DELETED' ), true ) ) {
 			$action_type = 'URL_UPDATED';
 		}
 
-		// Get service account credentials.
+		static $cached_service_account = null;
 		$service_account_json = get_option( 'fast_google_indexing_service_account', '' );
+		
 		if ( empty( $service_account_json ) ) {
 			$this->logger->log( $url, 0, __( 'Service account JSON not configured.', 'fast-google-indexing-api' ), $action_type, $source );
 			return new \WP_Error( 'no_credentials', __( 'Google Service Account JSON not configured.', 'fast-google-indexing-api' ) );
 		}
 
-		// Parse service account JSON.
-		$service_account = json_decode( $service_account_json, true );
-		if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $service_account['private_key'] ) ) {
-			$this->logger->log( $url, 0, __( 'Invalid service account JSON format.', 'fast-google-indexing-api' ), $action_type, $source );
-			return new \WP_Error( 'invalid_credentials', __( 'Invalid service account JSON format.', 'fast-google-indexing-api' ) );
+		if ( null === $cached_service_account || $cached_service_account['json'] !== $service_account_json ) {
+			$service_account = json_decode( $service_account_json, true );
+			if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $service_account['private_key'] ) ) {
+				$this->logger->log( $url, 0, __( 'Invalid service account JSON format.', 'fast-google-indexing-api' ), $action_type, $source );
+				return new \WP_Error( 'invalid_credentials', __( 'Invalid service account JSON format.', 'fast-google-indexing-api' ) );
+			}
+			$cached_service_account = array(
+				'json'  => $service_account_json,
+				'data'  => $service_account,
+			);
+		} else {
+			$service_account = $cached_service_account['data'];
 		}
 
 		// Get access token.
@@ -124,6 +133,23 @@ class Indexer {
 
 		$this->logger->log( $url, $response_code, $message, $action_type, $source );
 
+		if ( 200 === $response_code ) {
+			// When submit succeeds, mark as "submitted" (URL_IN_INDEX status).
+			// This means the URL has been successfully submitted to Google, not that Google has confirmed indexing.
+			// Use "Check Status" to verify if Google has actually indexed the URL.
+			if ( $post_id > 0 ) {
+				update_post_meta( $post_id, '_fgi_google_status', 'URL_IN_INDEX' );
+				update_post_meta( $post_id, '_fgi_last_checked', time() );
+			} else {
+				// Fallback: try to find post ID from URL.
+				$found_post_id = url_to_postid( $url );
+				if ( $found_post_id > 0 ) {
+					update_post_meta( $found_post_id, '_fgi_google_status', 'URL_IN_INDEX' );
+					update_post_meta( $found_post_id, '_fgi_last_checked', time() );
+				}
+			}
+		}
+
 		return ( 200 === $response_code );
 	}
 
@@ -135,16 +161,25 @@ class Indexer {
 	 * @return array|\WP_Error Inspection result or WP_Error on failure.
 	 */
 	public function inspect_url( $url, $post_id = 0 ) {
-		// Get service account credentials.
+		// Get service account credentials (reuse cached parsing from submit_url if available).
+		static $cached_service_account = null;
 		$service_account_json = get_option( 'fast_google_indexing_service_account', '' );
+		
 		if ( empty( $service_account_json ) ) {
 			return new \WP_Error( 'no_credentials', __( 'Service account JSON not configured.', 'fast-google-indexing-api' ) );
 		}
 
-		// Parse service account JSON.
-		$service_account = json_decode( $service_account_json, true );
-		if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $service_account['private_key'] ) ) {
-			return new \WP_Error( 'invalid_credentials', __( 'Invalid service account JSON format.', 'fast-google-indexing-api' ) );
+		if ( null === $cached_service_account || $cached_service_account['json'] !== $service_account_json ) {
+			$service_account = json_decode( $service_account_json, true );
+			if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $service_account['private_key'] ) ) {
+				return new \WP_Error( 'invalid_credentials', __( 'Invalid service account JSON format.', 'fast-google-indexing-api' ) );
+			}
+			$cached_service_account = array(
+				'json'  => $service_account_json,
+				'data'  => $service_account,
+			);
+		} else {
+			$service_account = $cached_service_account['data'];
 		}
 
 		// Get site URL for the request.
@@ -196,15 +231,66 @@ class Indexer {
 
 		// Extract index status.
 		$index_status = '';
-		if ( isset( $data['inspectionResult']['indexStatusResult']['verdict'] ) ) {
-			$verdict = $data['inspectionResult']['indexStatusResult']['verdict'];
-			if ( 'PASS' === $verdict ) {
-				$index_status = 'URL_IN_INDEX';
-			} else {
-				$index_status = 'URL_NOT_IN_INDEX';
+		if ( isset( $data['inspectionResult']['indexStatusResult'] ) ) {
+			$index_status_result = $data['inspectionResult']['indexStatusResult'];
+			
+			// Check coverageState first (most reliable indicator).
+			// Possible values: SUBMITTED_AND_INDEXED, INDEXED, NOT_INDEXED, EXCLUDED
+			if ( isset( $index_status_result['coverageState'] ) ) {
+				$coverage_state = $index_status_result['coverageState'];
+				// SUBMITTED_AND_INDEXED or INDEXED means the URL is indexed.
+				if ( 'SUBMITTED_AND_INDEXED' === $coverage_state || 'INDEXED' === $coverage_state ) {
+					$index_status = 'URL_IN_INDEX';
+				} elseif ( 'NOT_INDEXED' === $coverage_state || 'EXCLUDED' === $coverage_state ) {
+					$index_status = 'URL_NOT_IN_INDEX';
+				}
+			}
+			
+			// Fallback to verdict if coverageState is not available or not conclusive.
+			// Possible values: PASS, FAIL, PARTIAL, NEUTRAL
+			if ( empty( $index_status ) && isset( $index_status_result['verdict'] ) ) {
+				$verdict = $index_status_result['verdict'];
+				// PASS means the URL is indexed.
+				if ( 'PASS' === $verdict ) {
+					$index_status = 'URL_IN_INDEX';
+				} elseif ( 'FAIL' === $verdict || 'PARTIAL' === $verdict || 'NEUTRAL' === $verdict ) {
+					$index_status = 'URL_NOT_IN_INDEX';
+				}
+			}
+			
+			// Additional check: if indexStatusResult exists but no status determined,
+			// check if there's any indication of indexing in the response.
+			if ( empty( $index_status ) ) {
+				// Check for lastCrawlTime - if exists and not empty, URL has been crawled.
+				if ( isset( $index_status_result['lastCrawlTime'] ) && ! empty( $index_status_result['lastCrawlTime'] ) ) {
+					// URL has been crawled, likely indexed (especially if user confirms it's indexed on Google).
+					$index_status = 'URL_IN_INDEX';
+				} elseif ( isset( $index_status_result['indexingState'] ) ) {
+					// Check indexingState if available.
+					$indexing_state = $index_status_result['indexingState'];
+					if ( 'INDEXING_ALLOWED' === $indexing_state || 'INDEXING_ALLOWED_BY_ROBOTS' === $indexing_state ) {
+						// If indexing is allowed but no coverageState, might be pending.
+						// Leave empty to show as unknown/pending.
+					}
+				}
+			}
+			
+			// Final fallback: if we still don't have status, check the entire inspectionResult structure.
+			// Sometimes Google returns data in different locations.
+			if ( empty( $index_status ) && isset( $data['inspectionResult'] ) ) {
+				$inspection_result = $data['inspectionResult'];
+				// Check if there's a direct indexStatus field.
+				if ( isset( $inspection_result['indexStatus'] ) ) {
+					$direct_status = $inspection_result['indexStatus'];
+					if ( 'INDEXED' === $direct_status || 'SUBMITTED_AND_INDEXED' === $direct_status ) {
+						$index_status = 'URL_IN_INDEX';
+					} elseif ( 'NOT_INDEXED' === $direct_status ) {
+						$index_status = 'URL_NOT_IN_INDEX';
+					}
+				}
 			}
 		}
-
+		
 		// Update post meta if post ID is provided.
 		if ( $post_id > 0 ) {
 			update_post_meta( $post_id, '_fgi_google_status', $index_status );
@@ -224,20 +310,33 @@ class Indexer {
 	 * @return string Site URL or empty string.
 	 */
 	private function get_site_url() {
+		// Cache the site URL to avoid repeated option calls.
+		static $cached_url = null;
+		
+		if ( null !== $cached_url ) {
+			return $cached_url;
+		}
+
 		// First, try to get from settings.
 		$site_url = get_option( 'fast_google_indexing_site_url', '' );
 		if ( ! empty( $site_url ) ) {
-			return $site_url;
+			// Ensure trailing slash for settings URL too.
+			$cached_url = untrailingslashit( $site_url ) . '/';
+			return $cached_url;
 		}
 
 		// Auto-detect from home_url().
 		$home_url = home_url();
 		$parsed   = wp_parse_url( $home_url );
 		if ( isset( $parsed['scheme'] ) && isset( $parsed['host'] ) ) {
-			return $parsed['scheme'] . '://' . $parsed['host'];
+			$detected_url = $parsed['scheme'] . '://' . $parsed['host'];
+			// Force append trailing slash to match Google Search Console standards.
+			$cached_url = untrailingslashit( $detected_url ) . '/';
+			return $cached_url;
 		}
 
-		return '';
+		$cached_url = '';
+		return $cached_url;
 	}
 
 	/**
