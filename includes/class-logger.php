@@ -53,6 +53,8 @@ class Logger {
 
 	/**
 	 * Create the logs table.
+	 *
+	 * @return void
 	 */
 	public function create_table() {
 		global $wpdb;
@@ -65,14 +67,43 @@ class Logger {
 			status_code int(11) DEFAULT NULL,
 			message text,
 			action_type varchar(50) DEFAULT NULL,
+			source varchar(20) DEFAULT 'auto',
 			created_at datetime DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
 			KEY url (url),
-			KEY created_at (created_at)
+			KEY created_at (created_at),
+			KEY source (source)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+	}
+
+	/**
+	 * Update table schema for new columns.
+	 *
+	 * @return void
+	 */
+	public function update_table_schema() {
+		global $wpdb;
+
+		$charset_collate = $wpdb->get_charset_collate();
+
+		// Check if source column exists.
+		$column_exists = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+				WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'source'",
+				$wpdb->dbname,
+				$this->table_name
+			)
+		);
+
+		if ( empty( $column_exists ) ) {
+			// Add source column.
+			$wpdb->query( "ALTER TABLE {$this->table_name} ADD COLUMN source varchar(20) DEFAULT 'auto' AFTER action_type" );
+			$wpdb->query( "ALTER TABLE {$this->table_name} ADD INDEX source (source)" );
+		}
 	}
 
 	/**
@@ -82,9 +113,16 @@ class Logger {
 	 * @param int    $status_code HTTP status code.
 	 * @param string $message    Response message.
 	 * @param string $action_type Action type (URL_UPDATED or URL_DELETED).
+	 * @param string $source     Source of the log entry (default: 'auto').
 	 */
-	public function log( $url, $status_code, $message, $action_type = 'URL_UPDATED' ) {
+	public function log( $url, $status_code, $message, $action_type = 'URL_UPDATED', $source = 'auto' ) {
 		global $wpdb;
+
+		// Validate source.
+		$valid_sources = array( 'auto', 'auto-scan', 'manual' );
+		if ( ! in_array( $source, $valid_sources, true ) ) {
+			$source = 'auto';
+		}
 
 		$wpdb->insert(
 			$this->table_name,
@@ -93,44 +131,70 @@ class Logger {
 				'status_code' => intval( $status_code ),
 				'message'     => sanitize_textarea_field( $message ),
 				'action_type' => sanitize_text_field( $action_type ),
+				'source'      => sanitize_text_field( $source ),
 			),
-			array( '%s', '%d', '%s', '%s' )
+			array( '%s', '%d', '%s', '%s', '%s' )
 		);
 	}
 
 	/**
-	 * Get logs with pagination.
+	 * Get logs with pagination and optional source filter.
 	 *
-	 * @param int $per_page Number of logs per page.
-	 * @param int $page     Current page.
+	 * @param int    $per_page Number of logs per page.
+	 * @param int    $page     Current page.
+	 * @param string $source   Optional source filter ('auto', 'auto-scan', 'manual', or empty for all).
 	 * @return array Array of log entries.
 	 */
-	public function get_logs( $per_page = 20, $page = 1 ) {
+	public function get_logs( $per_page = 20, $page = 1, $source = '' ) {
 		global $wpdb;
 
 		$offset = ( $page - 1 ) * $per_page;
 
-		$results = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT * FROM {$this->table_name} ORDER BY created_at DESC LIMIT %d OFFSET %d",
-				$per_page,
-				$offset
-			),
-			ARRAY_A
-		);
+		if ( empty( $source ) ) {
+			// No source filter - use prepare() only for LIMIT and OFFSET.
+			$query = "SELECT * FROM {$this->table_name} ORDER BY created_at DESC LIMIT %d OFFSET %d";
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					$query,
+					$per_page,
+					$offset
+				),
+				ARRAY_A
+			);
+		} else {
+			// Source filter provided - use prepare() for both WHERE and LIMIT/OFFSET.
+			$query = "SELECT * FROM {$this->table_name} WHERE source = %s ORDER BY created_at DESC LIMIT %d OFFSET %d";
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					$query,
+					$source,
+					$per_page,
+					$offset
+				),
+				ARRAY_A
+			);
+		}
 
 		return $results ? $results : array();
 	}
 
 	/**
-	 * Get total number of logs.
+	 * Get total number of logs with optional source filter.
 	 *
+	 * @param string $source Optional source filter.
 	 * @return int Total count.
 	 */
-	public function get_logs_count() {
+	public function get_logs_count( $source = '' ) {
 		global $wpdb;
 
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_name}" );
+		if ( empty( $source ) ) {
+			// No source filter - run query directly without prepare().
+			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_name}" );
+		} else {
+			// Source filter provided - use prepare() with WHERE clause.
+			$query = "SELECT COUNT(*) FROM {$this->table_name} WHERE source = %s";
+			return (int) $wpdb->get_var( $wpdb->prepare( $query, $source ) );
+		}
 	}
 
 	/**
@@ -165,4 +229,3 @@ class Logger {
 		throw new \Exception( 'Cannot unserialize singleton' );
 	}
 }
-

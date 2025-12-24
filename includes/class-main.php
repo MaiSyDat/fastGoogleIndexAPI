@@ -46,6 +46,13 @@ class Main {
 	public $logger;
 
 	/**
+	 * Scheduler instance.
+	 *
+	 * @var Scheduler
+	 */
+	public $scheduler;
+
+	/**
 	 * Get the singleton instance.
 	 *
 	 * @return Main
@@ -71,6 +78,7 @@ class Main {
 	private function load_dependencies() {
 		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-logger.php';
 		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-indexer.php';
+		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-scheduler.php';
 		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-admin.php';
 	}
 
@@ -83,6 +91,9 @@ class Main {
 
 		// Initialize indexer.
 		$this->indexer = Indexer::get_instance();
+
+		// Initialize scheduler.
+		$this->scheduler = Scheduler::get_instance();
 
 		// Initialize admin interface.
 		$this->admin = Admin::get_instance();
@@ -122,7 +133,7 @@ class Main {
 		$action_type = ( 'publish' === $old_status ) ? 'URL_UPDATED' : 'URL_UPDATED';
 
 		// Submit to Google Indexing API.
-		$this->indexer->submit_url( get_permalink( $post->ID ), $action_type );
+		$this->indexer->submit_url( get_permalink( $post->ID ), $action_type, 'auto' );
 	}
 
 	/**
@@ -144,9 +155,12 @@ class Main {
 		// Load logger class.
 		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-logger.php';
 		$logger = Logger::get_instance();
-		
+
 		// Create database table for logging.
 		$logger->create_table();
+
+		// Update table schema for existing installations.
+		$logger->update_table_schema();
 
 		// Set default options.
 		if ( false === get_option( 'fast_google_indexing_post_types' ) ) {
@@ -156,13 +170,25 @@ class Main {
 		if ( false === get_option( 'fast_google_indexing_action_type' ) ) {
 			update_option( 'fast_google_indexing_action_type', 'URL_UPDATED' );
 		}
+
+		if ( false === get_option( 'fast_google_indexing_scan_speed' ) ) {
+			update_option( 'fast_google_indexing_scan_speed', 'medium' );
+		}
+
+		// Schedule cron event.
+		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-scheduler.php';
+		$scheduler = Scheduler::get_instance();
+		$scheduler->schedule_event();
 	}
 
 	/**
 	 * Plugin deactivation.
 	 */
 	public function deactivate() {
-		// Cleanup can be added here if needed.
+		// Unschedule cron event.
+		require_once FAST_GOOGLE_INDEXING_API_PATH . 'includes/class-scheduler.php';
+		$scheduler = Scheduler::get_instance();
+		$scheduler->unschedule_event();
 	}
 
 	/**
@@ -177,4 +203,3 @@ class Main {
 		throw new \Exception( 'Cannot unserialize singleton' );
 	}
 }
-
