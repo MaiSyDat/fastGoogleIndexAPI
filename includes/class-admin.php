@@ -280,6 +280,9 @@ class Admin {
 								<p class="description">
 									<?php esc_html_e( 'Number of posts to check per hour during automated scanning. Slower speeds reduce API quota usage.', 'fast-google-indexing-api' ); ?>
 								</p>
+								<p class="description" style="color: #d63638; font-weight: 600;">
+									<?php esc_html_e( 'Note: Google Inspection API has a limit of approximately 2,000 requests per day. Please consider this when selecting Fast speed (100 posts/hour) as it may exceed this limit.', 'fast-google-indexing-api' ); ?>
+								</p>
 							</td>
 						</tr>
 					</tbody>
@@ -464,6 +467,87 @@ class Admin {
 	}
 
 	/**
+	 * Get count of indexed posts (optimized query).
+	 *
+	 * @param array $post_types Array of post types to query.
+	 * @return int Count of indexed posts.
+	 */
+	private function get_indexed_posts_count( $post_types ) {
+		if ( empty( $post_types ) || ! is_array( $post_types ) ) {
+			return 0;
+		}
+
+		// Use optimized query with fields => 'ids' and found_posts for counting.
+		$query_args = array(
+			'post_type'      => $post_types,
+			'post_status'    => 'publish',
+			'posts_per_page' => 1, // Only need 1 post to get found_posts.
+			'fields'         => 'ids',
+			'no_found_rows'  => false, // We need found_posts.
+			'meta_query'     => array(
+				'relation' => 'AND',
+				array(
+					'key'     => '_fgi_last_checked',
+					'compare' => 'EXISTS',
+				),
+				array(
+					'key'   => '_fgi_google_status',
+					'value' => 'URL_IN_INDEX',
+				),
+			),
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+
+		$query = new \WP_Query( $query_args );
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * Get count of not indexed posts (optimized query).
+	 *
+	 * @param array $post_types Array of post types to query.
+	 * @return int Count of not indexed posts.
+	 */
+	private function get_not_indexed_posts_count( $post_types ) {
+		if ( empty( $post_types ) || ! is_array( $post_types ) ) {
+			return 0;
+		}
+
+		// Use optimized query with fields => 'ids' and found_posts for counting.
+		$query_args = array(
+			'post_type'      => $post_types,
+			'post_status'    => 'publish',
+			'posts_per_page' => 1, // Only need 1 post to get found_posts.
+			'fields'         => 'ids',
+			'no_found_rows'  => false, // We need found_posts.
+			'meta_query'     => array(
+				'relation' => 'OR',
+				// Posts with status = URL_NOT_IN_INDEX (rejected).
+				array(
+					'key'   => '_fgi_google_status',
+					'value' => 'URL_NOT_IN_INDEX',
+				),
+				// Posts with no status (never checked or unknown).
+				array(
+					'key'     => '_fgi_google_status',
+					'compare' => 'NOT EXISTS',
+				),
+				// Posts with empty status.
+				array(
+					'key'   => '_fgi_google_status',
+					'value' => '',
+				),
+			),
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+
+		$query = new \WP_Query( $query_args );
+		return (int) $query->found_posts;
+	}
+
+	/**
 	 * Render Console Results page with tabs and filters.
 	 */
 	public function render_results_page() {
@@ -493,6 +577,10 @@ class Admin {
 		}
 		$enabled_post_types = $cached_enabled_types;
 
+		// Get counts for tabs (optimized queries).
+		$indexed_count = $this->get_indexed_posts_count( $enabled_post_types );
+		$not_indexed_count = $this->get_not_indexed_posts_count( $enabled_post_types );
+
 		// Get pagination.
 		$current_page = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$per_page = 20;
@@ -518,7 +606,7 @@ class Admin {
 
 		// Add status filter based on tab.
 		if ( 'indexed' === $current_tab ) {
-			// Indexed: Posts that have been submitted to Google (đã submit lên Google).
+			// Indexed: Posts that have been submitted to Google.
 			// Status = URL_IN_INDEX means the URL has been submitted successfully.
 			// Note: This doesn't mean Google has confirmed indexing, just that submission was successful.
 			// Use "Check Status" button to verify if Google has actually indexed the URL.
@@ -534,7 +622,7 @@ class Admin {
 				),
 			);
 		} else {
-			// Not indexed: Posts that have NOT been submitted to Google (chưa submit).
+			// Not indexed: Posts that have NOT been submitted to Google.
 			// This includes: posts never submitted, posts rejected by Google, or posts with unknown status.
 			$query_args['meta_query'] = array(
 				'relation' => 'OR',
@@ -584,11 +672,13 @@ class Admin {
 					<li class="indexed">
 						<a href="<?php echo esc_url( $indexed_url ); ?>" class="<?php echo 'indexed' === $current_tab ? 'current' : ''; ?>">
 							<?php esc_html_e( 'Indexed', 'fast-google-indexing-api' ); ?>
+							<span class="count">(<?php echo esc_html( $indexed_count ); ?>)</span>
 						</a> |
 					</li>
 					<li class="not-indexed">
 						<a href="<?php echo esc_url( $not_indexed_url ); ?>" class="<?php echo 'not_indexed' === $current_tab ? 'current' : ''; ?>">
 							<?php esc_html_e( 'Not Indexed', 'fast-google-indexing-api' ); ?>
+							<span class="count">(<?php echo esc_html( $not_indexed_count ); ?>)</span>
 						</a>
 					</li>
 				</ul>

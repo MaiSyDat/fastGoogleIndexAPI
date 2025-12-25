@@ -86,6 +86,9 @@ class Main {
 	 * Initialize plugin components.
 	 */
 	private function init() {
+		// Check for OpenSSL extension (required for JWT generation).
+		add_action( 'admin_notices', array( $this, 'check_openssl_extension' ) );
+
 		// Initialize logger first as other classes may depend on it.
 		$this->logger = Logger::get_instance();
 
@@ -103,6 +106,36 @@ class Main {
 
 		// Load text domain for translations.
 		add_action( 'plugins_loaded', array( $this, 'load_textdomain' ) );
+	}
+
+	/**
+	 * Check if OpenSSL extension is loaded and show admin notice if not.
+	 *
+	 * @return void
+	 */
+	public function check_openssl_extension() {
+		// Only show on admin pages.
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		// Only show on plugin pages or all admin pages.
+		$screen = get_current_screen();
+		if ( $screen && strpos( $screen->id, 'fast-google-indexing' ) === false && strpos( $screen->id, 'dashboard' ) === false ) {
+			return;
+		}
+
+		// Check if OpenSSL extension is loaded.
+		if ( ! extension_loaded( 'openssl' ) ) {
+			?>
+			<div class="notice notice-error">
+				<p>
+					<strong><?php esc_html_e( 'Fast Google Indexing API - Error:', 'fast-google-indexing-api' ); ?></strong>
+					<?php esc_html_e( 'OpenSSL extension is required for this plugin to function properly. Please enable the OpenSSL extension in your PHP configuration.', 'fast-google-indexing-api' ); ?>
+				</p>
+			</div>
+			<?php
+		}
 	}
 
 	/**

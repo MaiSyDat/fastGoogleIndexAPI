@@ -291,6 +291,39 @@ class Logger {
 	}
 
 	/**
+	 * Clean up old logs older than specified days.
+	 *
+	 * @param int $days Number of days to keep logs (default: 30).
+	 * @return int Number of logs deleted.
+	 */
+	public function cleanup_old_logs( $days = 30 ) {
+		global $wpdb;
+
+		// Validate days parameter.
+		$days = absint( $days );
+		if ( $days < 1 ) {
+			$days = 30; // Default to 30 days if invalid.
+		}
+
+		// Delete logs older than specified days.
+		$query = $wpdb->prepare(
+			"DELETE FROM {$this->table_name} WHERE created_at < DATE_SUB(NOW(), INTERVAL %d DAY)",
+			$days
+		);
+
+		$deleted = $wpdb->query( $query );
+
+		// Clear all count caches after cleanup.
+		if ( false !== $deleted && $deleted > 0 ) {
+			delete_transient( 'fgi_logs_count_' . md5( '' ) );
+			delete_transient( 'fgi_logs_count_' . md5( 'auto' ) );
+			delete_transient( 'fgi_logs_count_' . md5( 'manual' ) );
+		}
+
+		return (int) $deleted;
+	}
+
+	/**
 	 * Get table name.
 	 *
 	 * @return string Table name.

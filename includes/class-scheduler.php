@@ -44,16 +44,25 @@ class Scheduler {
 	}
 
 	/**
+	 * Logger instance.
+	 *
+	 * @var Logger
+	 */
+	private $logger;
+
+	/**
 	 * Constructor.
 	 */
 	private function __construct() {
 		$this->indexer = Indexer::get_instance();
+		$this->logger = Logger::get_instance();
 
 		// Register custom schedule.
 		add_filter( 'cron_schedules', array( $this, 'add_custom_schedule' ) );
 
-		// Hook scheduled event.
+		// Hook scheduled events.
 		add_action( 'fgi_run_scheduled_scan', array( $this, 'run_scheduled_scan' ) );
+		add_action( 'fgi_cleanup_old_logs', array( $this, 'run_log_cleanup' ) );
 	}
 
 	/**
@@ -79,6 +88,11 @@ class Scheduler {
 		if ( ! wp_next_scheduled( 'fgi_run_scheduled_scan' ) ) {
 			wp_schedule_event( time(), 'fgi_hourly', 'fgi_run_scheduled_scan' );
 		}
+
+		// Schedule daily log cleanup event.
+		if ( ! wp_next_scheduled( 'fgi_cleanup_old_logs' ) ) {
+			wp_schedule_event( time(), 'daily', 'fgi_cleanup_old_logs' );
+		}
 	}
 
 	/**
@@ -91,6 +105,22 @@ class Scheduler {
 		if ( $timestamp ) {
 			wp_unschedule_event( $timestamp, 'fgi_run_scheduled_scan' );
 		}
+
+		// Unschedule log cleanup event.
+		$cleanup_timestamp = wp_next_scheduled( 'fgi_cleanup_old_logs' );
+		if ( $cleanup_timestamp ) {
+			wp_unschedule_event( $cleanup_timestamp, 'fgi_cleanup_old_logs' );
+		}
+	}
+
+	/**
+	 * Run scheduled log cleanup.
+	 *
+	 * @return void
+	 */
+	public function run_log_cleanup() {
+		// Clean up logs older than 30 days.
+		$this->logger->cleanup_old_logs( 30 );
 	}
 
 	/**
