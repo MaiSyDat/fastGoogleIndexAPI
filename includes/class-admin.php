@@ -514,6 +514,8 @@ class Admin {
 			return 0;
 		}
 
+		$cutoff_time = time() - ( 48 * HOUR_IN_SECONDS );
+
 		// Use optimized query with fields => 'ids' and found_posts for counting.
 		$query_args = array(
 			'post_type'      => $post_types,
@@ -522,23 +524,112 @@ class Admin {
 			'fields'         => 'ids',
 			'no_found_rows'  => false, // We need found_posts.
 			'meta_query'     => array(
-				'relation' => 'OR',
-				// Posts with status = URL_NOT_IN_INDEX (rejected).
+				'relation' => 'AND',
+				// Status is not INDEXED (or doesn't exist).
 				array(
-					'key'   => '_fgi_google_status',
-					'value' => 'URL_NOT_IN_INDEX',
+					'relation' => 'OR',
+					array(
+						'key'     => '_fgi_google_status',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => '_fgi_google_status',
+						'value'   => '',
+					),
+					array(
+						'key'     => '_fgi_google_status',
+						'value'   => 'URL_IN_INDEX',
+						'compare' => '!=',
+					),
 				),
-				// Posts with no status (never checked or unknown).
+				// last_submitted_at doesn't exist OR is older than 48 hours.
 				array(
-					'key'     => '_fgi_google_status',
-					'compare' => 'NOT EXISTS',
-				),
-				// Posts with empty status.
-				array(
-					'key'   => '_fgi_google_status',
-					'value' => '',
+					'relation' => 'OR',
+					array(
+						'key'     => '_fgi_last_submitted_at',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => '_fgi_last_submitted_at',
+						'value'   => $cutoff_time,
+						'compare' => '<',
+					),
 				),
 			),
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+
+		$query = new \WP_Query( $query_args );
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * Get count of pending posts (submitted within last 48 hours but not indexed).
+	 *
+	 * @param array $post_types Array of post types to query.
+	 * @return int Count of pending posts.
+	 */
+	private function get_pending_posts_count( $post_types ) {
+		if ( empty( $post_types ) || ! is_array( $post_types ) ) {
+			return 0;
+		}
+
+		$cutoff_time = time() - ( 48 * HOUR_IN_SECONDS );
+
+		$query_args = array(
+			'post_type'      => $post_types,
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'no_found_rows'  => false,
+			'meta_query'     => array(
+				'relation' => 'AND',
+				// Has been submitted within last 48 hours.
+				array(
+					'key'     => '_fgi_last_submitted_at',
+					'value'   => $cutoff_time,
+					'compare' => '>=',
+				),
+				// Status is not INDEXED (or doesn't exist).
+				array(
+					'relation' => 'OR',
+					array(
+						'key'     => '_fgi_google_status',
+						'value'   => 'URL_IN_INDEX',
+						'compare' => '!=',
+					),
+					array(
+						'key'     => '_fgi_google_status',
+						'compare' => 'NOT EXISTS',
+					),
+				),
+			),
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+
+		$query = new \WP_Query( $query_args );
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * Get count of all posts (for "All" filter).
+	 *
+	 * @param array $post_types Array of post types to query.
+	 * @return int Count of all posts.
+	 */
+	private function get_all_posts_count( $post_types ) {
+		if ( empty( $post_types ) || ! is_array( $post_types ) ) {
+			return 0;
+		}
+
+		$query_args = array(
+			'post_type'      => $post_types,
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'no_found_rows'  => false,
 			'update_post_meta_cache' => false,
 			'update_post_term_cache' => false,
 		);
@@ -563,11 +654,11 @@ class Admin {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to submit URL to Google Indexing API. Please check the logs.', 'fast-google-indexing-api' ) . '</p></div>';
 		}
 
-		// Get current tab (indexed or not_indexed).
-		$current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'indexed'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$valid_tabs = array( 'indexed', 'not_indexed' );
-		if ( ! in_array( $current_tab, $valid_tabs, true ) ) {
-			$current_tab = 'indexed';
+		// Get current filter (all, indexed, pending, not_indexed).
+		$current_filter = isset( $_GET['filter'] ) ? sanitize_text_field( wp_unslash( $_GET['filter'] ) ) : 'all'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$valid_filters = array( 'all', 'indexed', 'pending', 'not_indexed' );
+		if ( ! in_array( $current_filter, $valid_filters, true ) ) {
+			$current_filter = 'all';
 		}
 
 		// Get enabled post types (use static cache to avoid repeated option calls).
@@ -577,8 +668,10 @@ class Admin {
 		}
 		$enabled_post_types = $cached_enabled_types;
 
-		// Get counts for tabs (optimized queries).
+		// Get counts for filters (optimized queries).
+		$all_count = $this->get_all_posts_count( $enabled_post_types );
 		$indexed_count = $this->get_indexed_posts_count( $enabled_post_types );
+		$pending_count = $this->get_pending_posts_count( $enabled_post_types );
 		$not_indexed_count = $this->get_not_indexed_posts_count( $enabled_post_types );
 
 		// Get pagination.
@@ -604,12 +697,9 @@ class Admin {
 			'no_found_rows'  => false, // We need found_posts for pagination.
 		);
 
-		// Add status filter based on tab.
-		if ( 'indexed' === $current_tab ) {
-			// Indexed: Posts that have been submitted to Google.
-			// Status = URL_IN_INDEX means the URL has been submitted successfully.
-			// Note: This doesn't mean Google has confirmed indexing, just that submission was successful.
-			// Use "Check Status" button to verify if Google has actually indexed the URL.
+		// Add status filter based on current filter.
+		if ( 'indexed' === $current_filter ) {
+			// Indexed: Posts where status === 'URL_IN_INDEX'.
 			$query_args['meta_query'] = array(
 				'relation' => 'AND',
 				array(
@@ -621,28 +711,69 @@ class Admin {
 					'value' => 'URL_IN_INDEX',
 				),
 			);
-		} else {
-			// Not indexed: Posts that have NOT been submitted to Google.
-			// This includes: posts never submitted, posts rejected by Google, or posts with unknown status.
+		} elseif ( 'pending' === $current_filter ) {
+			// Pending: Posts where status !== 'URL_IN_INDEX' AND last_submitted_at is within last 48 hours.
+			$cutoff_time = time() - ( 48 * HOUR_IN_SECONDS );
 			$query_args['meta_query'] = array(
-				'relation' => 'OR',
-				// Posts with status = URL_NOT_IN_INDEX (rejected).
+				'relation' => 'AND',
+				// Has been submitted within last 48 hours.
 				array(
-					'key'   => '_fgi_google_status',
-					'value' => 'URL_NOT_IN_INDEX',
+					'key'     => '_fgi_last_submitted_at',
+					'value'   => $cutoff_time,
+					'compare' => '>=',
 				),
-				// Posts with no status (never checked or unknown).
+				// Status is not INDEXED (or doesn't exist).
 				array(
-					'key'     => '_fgi_google_status',
-					'compare' => 'NOT EXISTS',
+					'relation' => 'OR',
+					array(
+						'key'     => '_fgi_google_status',
+						'value'   => 'URL_IN_INDEX',
+						'compare' => '!=',
+					),
+					array(
+						'key'     => '_fgi_google_status',
+						'compare' => 'NOT EXISTS',
+					),
 				),
-				// Posts with empty status.
+			);
+		} elseif ( 'not_indexed' === $current_filter ) {
+			// Not Indexed: Posts where status !== 'URL_IN_INDEX' AND (last_submitted_at doesn't exist OR is older than 48 hours).
+			$cutoff_time = time() - ( 48 * HOUR_IN_SECONDS );
+			$query_args['meta_query'] = array(
+				'relation' => 'AND',
+				// Status is not INDEXED (or doesn't exist).
 				array(
-					'key'   => '_fgi_google_status',
-					'value' => '',
+					'relation' => 'OR',
+					array(
+						'key'     => '_fgi_google_status',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => '_fgi_google_status',
+						'value'   => '',
+					),
+					array(
+						'key'     => '_fgi_google_status',
+						'value'   => 'URL_IN_INDEX',
+						'compare' => '!=',
+					),
+				),
+				// last_submitted_at doesn't exist OR is older than 48 hours.
+				array(
+					'relation' => 'OR',
+					array(
+						'key'     => '_fgi_last_submitted_at',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => '_fgi_last_submitted_at',
+						'value'   => $cutoff_time,
+						'compare' => '<',
+					),
 				),
 			);
 		}
+		// 'all' filter: no meta_query restrictions.
 
 		// Query posts.
 		$query = new \WP_Query( $query_args );
@@ -653,9 +784,11 @@ class Admin {
 		// Build URLs.
 		$base_url = admin_url( 'admin.php?page=fast-google-indexing-api-results' );
 		
-		// Build tab URLs.
-		$indexed_url = add_query_arg( array( 'tab' => 'indexed' ), $base_url );
-		$not_indexed_url = add_query_arg( array( 'tab' => 'not_indexed' ), $base_url );
+		// Build filter URLs.
+		$all_url = add_query_arg( array( 'filter' => 'all' ), $base_url );
+		$indexed_url = add_query_arg( array( 'filter' => 'indexed' ), $base_url );
+		$pending_url = add_query_arg( array( 'filter' => 'pending' ), $base_url );
+		$not_indexed_url = add_query_arg( array( 'filter' => 'not_indexed' ), $base_url );
 
 		?>
 		<div class="wrap">
@@ -667,16 +800,28 @@ class Admin {
 				</div>
 			<?php else : ?>
 
-				<!-- Tabs -->
+				<!-- Filter Links -->
 				<ul class="subsubsub">
+					<li class="all">
+						<a href="<?php echo esc_url( $all_url ); ?>" class="<?php echo 'all' === $current_filter ? 'current' : ''; ?>">
+							<?php esc_html_e( 'All', 'fast-google-indexing-api' ); ?>
+							<span class="count">(<?php echo esc_html( $all_count ); ?>)</span>
+						</a> |
+					</li>
 					<li class="indexed">
-						<a href="<?php echo esc_url( $indexed_url ); ?>" class="<?php echo 'indexed' === $current_tab ? 'current' : ''; ?>">
+						<a href="<?php echo esc_url( $indexed_url ); ?>" class="<?php echo 'indexed' === $current_filter ? 'current' : ''; ?>">
 							<?php esc_html_e( 'Indexed', 'fast-google-indexing-api' ); ?>
 							<span class="count">(<?php echo esc_html( $indexed_count ); ?>)</span>
 						</a> |
 					</li>
+					<li class="pending">
+						<a href="<?php echo esc_url( $pending_url ); ?>" class="<?php echo 'pending' === $current_filter ? 'current' : ''; ?>">
+							<?php esc_html_e( 'Pending', 'fast-google-indexing-api' ); ?>
+							<span class="count">(<?php echo esc_html( $pending_count ); ?>)</span>
+						</a> |
+					</li>
 					<li class="not-indexed">
-						<a href="<?php echo esc_url( $not_indexed_url ); ?>" class="<?php echo 'not_indexed' === $current_tab ? 'current' : ''; ?>">
+						<a href="<?php echo esc_url( $not_indexed_url ); ?>" class="<?php echo 'not_indexed' === $current_filter ? 'current' : ''; ?>">
 							<?php esc_html_e( 'Not Indexed', 'fast-google-indexing-api' ); ?>
 							<span class="count">(<?php echo esc_html( $not_indexed_count ); ?>)</span>
 						</a>
@@ -716,6 +861,7 @@ class Admin {
 								// Get meta from cache (update_postmeta_cache makes get_post_meta use cache).
 								$status = get_post_meta( $post->ID, '_fgi_google_status', true );
 								$last_checked = get_post_meta( $post->ID, '_fgi_last_checked', true );
+								$last_submitted_at = get_post_meta( $post->ID, '_fgi_last_submitted_at', true );
 								
 								// Cache post type objects.
 								if ( ! isset( $post_type_cache[ $post->post_type ] ) ) {
@@ -725,6 +871,35 @@ class Admin {
 								
 								$edit_url = get_edit_post_link( $post->ID );
 								$permalink = get_permalink( $post->ID );
+								
+								// Determine if button should be disabled (submitted less than 24 hours ago).
+								$is_button_disabled = false;
+								$submitted_hours_ago = null;
+								if ( ! empty( $last_submitted_at ) ) {
+									$hours_ago = ( time() - intval( $last_submitted_at ) ) / HOUR_IN_SECONDS;
+									if ( $hours_ago < 24 ) {
+										$is_button_disabled = true;
+										$submitted_hours_ago = round( $hours_ago, 1 );
+									}
+								}
+								
+								// Determine status badge (Indexed, Pending, Not Indexed).
+								$status_badge_class = 'fgi-status-badge-gray';
+								$status_badge_text = __( 'Not Indexed', 'fast-google-indexing-api' );
+								$status_badge_icon = 'dashicons-minus';
+								
+								if ( 'URL_IN_INDEX' === $status ) {
+									$status_badge_class = 'fgi-status-badge-green';
+									$status_badge_text = __( 'Indexed', 'fast-google-indexing-api' );
+									$status_badge_icon = 'dashicons-yes-alt';
+								} elseif ( ! empty( $last_submitted_at ) ) {
+									$hours_since_submission = ( time() - intval( $last_submitted_at ) ) / HOUR_IN_SECONDS;
+									if ( $hours_since_submission < 48 ) {
+										$status_badge_class = 'fgi-status-badge-orange';
+										$status_badge_text = __( 'Pending', 'fast-google-indexing-api' );
+										$status_badge_icon = 'dashicons-clock';
+									}
+								}
 							?>
 								<tr>
 									<td>
@@ -741,22 +916,10 @@ class Admin {
 										<?php echo esc_html( $post_type_obj ? $post_type_obj->label : $post->post_type ); ?>
 									</td>
 									<td>
-										<?php if ( 'URL_IN_INDEX' === $status ) : ?>
-											<span class="fgi-status-indexed" title="<?php esc_attr_e( 'Indexed', 'fast-google-indexing-api' ); ?>">
-												<span class="dashicons dashicons-yes-alt"></span>
-												<?php esc_html_e( 'Indexed', 'fast-google-indexing-api' ); ?>
-											</span>
-										<?php elseif ( 'URL_NOT_IN_INDEX' === $status ) : ?>
-											<span class="fgi-status-not-indexed" title="<?php esc_attr_e( 'Not indexed', 'fast-google-indexing-api' ); ?>">
-												<span class="dashicons dashicons-dismiss"></span>
-												<?php esc_html_e( 'Not Indexed', 'fast-google-indexing-api' ); ?>
-											</span>
-										<?php else : ?>
-											<span class="fgi-status-unknown" title="<?php esc_attr_e( 'Not checked yet', 'fast-google-indexing-api' ); ?>">
-												<span class="dashicons dashicons-minus"></span>
-												<?php esc_html_e( 'Unknown', 'fast-google-indexing-api' ); ?>
-											</span>
-										<?php endif; ?>
+										<span class="fgi-status-badge <?php echo esc_attr( $status_badge_class ); ?>" title="<?php echo esc_attr( $status_badge_text ); ?>">
+											<span class="dashicons <?php echo esc_attr( $status_badge_icon ); ?>"></span>
+											<?php echo esc_html( $status_badge_text ); ?>
+										</span>
 									</td>
 									<td>
 										<?php
@@ -769,14 +932,28 @@ class Admin {
 									</td>
 									<td>
 										<?php if ( $permalink ) : ?>
-											<button 
-												type="button" 
-												class="button button-small fgi-submit-url-btn fgi-action-buttons" 
-												data-post-id="<?php echo esc_attr( $post->ID ); ?>"
-												data-action-type="URL_UPDATED"
-											>
-												<?php esc_html_e( 'Index Now', 'fast-google-indexing-api' ); ?>
-											</button>
+											<div class="fgi-action-wrapper">
+												<button 
+													type="button" 
+													class="button button-small fgi-submit-url-btn fgi-action-buttons <?php echo $is_button_disabled ? 'fgi-button-disabled' : ''; ?>" 
+													data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+													data-action-type="URL_UPDATED"
+													<?php echo $is_button_disabled ? 'disabled' : ''; ?>
+												>
+													<?php esc_html_e( 'Index Now', 'fast-google-indexing-api' ); ?>
+												</button>
+												<?php if ( $is_button_disabled && $submitted_hours_ago ) : ?>
+													<span class="fgi-submitted-info">
+														<?php
+														printf(
+															/* translators: %s: number of hours */
+															esc_html__( 'Submitted %s hours ago', 'fast-google-indexing-api' ),
+															esc_html( number_format_i18n( $submitted_hours_ago, 1 ) )
+														);
+														?>
+													</span>
+												<?php endif; ?>
+											</div>
 											<button 
 												type="button" 
 												class="button button-small fgi-check-status-btn fgi-action-buttons" 
@@ -799,8 +976,8 @@ class Admin {
 							<div class="tablenav-pages">
 								<?php
 								$paged_params = array(
-									'tab'   => $current_tab,
-									'paged' => '%#%',
+									'filter' => $current_filter,
+									'paged'   => '%#%',
 								);
 								$paged_url = add_query_arg( $paged_params, $base_url );
 								

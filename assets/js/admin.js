@@ -76,14 +76,14 @@
 						var status = response.data.status;
 						var message = response.data.message;
 						
-						// Update status icon with text
+						// Update status badge with appropriate color
 						var statusHtml = '';
 						if (status === 'URL_IN_INDEX') {
-							statusHtml = '<span class="fgi-status-indexed" title="' + fgiAdmin.indexedText + '"><span class="dashicons dashicons-yes-alt"></span> ' + fgiAdmin.indexedText + '</span>';
+							statusHtml = '<span class="fgi-status-badge fgi-status-badge-green" title="' + fgiAdmin.indexedText + '"><span class="dashicons dashicons-yes-alt"></span> ' + fgiAdmin.indexedText + '</span>';
 						} else if (status === 'URL_NOT_IN_INDEX') {
-							statusHtml = '<span class="fgi-status-not-indexed" title="' + fgiAdmin.notIndexedText + '"><span class="dashicons dashicons-dismiss"></span> ' + fgiAdmin.notIndexedText + '</span>';
+							statusHtml = '<span class="fgi-status-badge fgi-status-badge-gray" title="' + fgiAdmin.notIndexedText + '"><span class="dashicons dashicons-minus"></span> ' + fgiAdmin.notIndexedText + '</span>';
 						} else {
-							statusHtml = '<span class="fgi-status-unknown" title="Unknown"><span class="dashicons dashicons-minus"></span> Unknown</span>';
+							statusHtml = '<span class="fgi-status-badge fgi-status-badge-gray" title="Unknown"><span class="dashicons dashicons-minus"></span> Unknown</span>';
 						}
 						
 						// Update status in table
@@ -167,8 +167,8 @@
 			e.preventDefault();
 			var btn = $(this);
 			
-			// Prevent multiple clicks
-			if (btn.prop('disabled')) {
+			// Prevent multiple clicks or if button is disabled
+			if (btn.prop('disabled') || btn.hasClass('fgi-button-disabled')) {
 				return;
 			}
 			
@@ -201,13 +201,8 @@
 						var lastChecked = response.data.last_checked;
 						var message = response.data.message;
 						
-						// Update status icon
-						var statusHtml = '';
-						if (status === 'URL_IN_INDEX') {
-							statusHtml = '<span class="fgi-status-indexed" title="' + fgiAdmin.indexedText + '"><span class="dashicons dashicons-yes-alt"></span> ' + fgiAdmin.indexedText + '</span>';
-						} else {
-							statusHtml = '<span class="fgi-status-unknown" title="' + fgiAdmin.notIndexedText + '"><span class="dashicons dashicons-minus"></span> Unknown</span>';
-						}
+						// Update status badge - show as Pending (orange) after submission
+						var statusHtml = '<span class="fgi-status-badge fgi-status-badge-orange" title="Pending"><span class="dashicons dashicons-clock"></span> Pending</span>';
 						
 						// Update status cell
 						if (statusCell.length) {
@@ -221,6 +216,14 @@
 							lastCheckedCell.html(formattedDate);
 						}
 						
+						// Disable button and show "Submitted X hours ago" message
+						btn.addClass('fgi-button-disabled').prop('disabled', true);
+						var actionWrapper = btn.closest('.fgi-action-wrapper');
+						if (actionWrapper.length) {
+							var submittedInfo = $('<span class="fgi-submitted-info">Submitted 0 hours ago</span>');
+							actionWrapper.append(submittedInfo);
+						}
+						
 						// Show success message
 						var msgDiv = $('<div class="notice notice-success inline fgi-notice"><p>' + message + '</p></div>');
 						btn.after(msgDiv);
@@ -230,16 +233,10 @@
 							});
 						}, 3000);
 						
-						// If status is URL_IN_INDEX, remove row (it will appear in Indexed tab)
-						if (status === 'URL_IN_INDEX') {
-							setTimeout(function() {
-								row.fadeOut(300, function() {
-									$(this).remove();
-								});
-							}, 1500);
-						}
-						
-						btn.prop('disabled', false).text(originalText);
+						// Reload page after 2 seconds to update filter counts and show in correct filter
+						setTimeout(function() {
+							window.location.reload();
+						}, 2000);
 					} else {
 						var errorMsg = response.data && response.data.message ? response.data.message : fgiAdmin.errorText;
 						var errorDiv = $('<div class="notice notice-error inline fgi-notice"><p>' + errorMsg + '</p></div>');

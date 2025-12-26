@@ -137,15 +137,18 @@ class Indexer {
 			// When submit succeeds, mark as "submitted" (URL_IN_INDEX status).
 			// This means the URL has been successfully submitted to Google, not that Google has confirmed indexing.
 			// Use "Check Status" to verify if Google has actually indexed the URL.
+			$current_time = time();
 			if ( $post_id > 0 ) {
 				update_post_meta( $post_id, '_fgi_google_status', 'URL_IN_INDEX' );
-				update_post_meta( $post_id, '_fgi_last_checked', time() );
+				update_post_meta( $post_id, '_fgi_last_checked', $current_time );
+				update_post_meta( $post_id, '_fgi_last_submitted_at', $current_time );
 			} else {
 				// Fallback: try to find post ID from URL.
 				$found_post_id = url_to_postid( $url );
 				if ( $found_post_id > 0 ) {
 					update_post_meta( $found_post_id, '_fgi_google_status', 'URL_IN_INDEX' );
-					update_post_meta( $found_post_id, '_fgi_last_checked', time() );
+					update_post_meta( $found_post_id, '_fgi_last_checked', $current_time );
+					update_post_meta( $found_post_id, '_fgi_last_submitted_at', $current_time );
 				}
 			}
 		}

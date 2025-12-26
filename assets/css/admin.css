@@ -21,6 +21,55 @@
 	color: #f0b849; /* Orange/Yellow for pending */
 }
 
+/* Status Badges */
+.fgi-status-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.4;
+}
+
+.fgi-status-badge .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+	line-height: 1;
+}
+
+.fgi-status-badge-green {
+	background-color: #d4edda;
+	color: #155724;
+	border: 1px solid #c3e6cb;
+}
+
+.fgi-status-badge-green .dashicons {
+	color: #00a32a;
+}
+
+.fgi-status-badge-orange {
+	background-color: #fff3cd;
+	color: #856404;
+	border: 1px solid #ffeaa7;
+}
+
+.fgi-status-badge-orange .dashicons {
+	color: #f0b849;
+}
+
+.fgi-status-badge-gray {
+	background-color: #e9ecef;
+	color: #495057;
+	border: 1px solid #dee2e6;
+}
+
+.fgi-status-badge-gray .dashicons {
+	color: #646970;
+}
+
 /* Status colors in logs table */
 .fgi-status-code-success {
 	color: #00a32a;
@@ -61,6 +110,37 @@
 .fgi-check-status-btn:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
+}
+
+/* Disabled Index Now button */
+.fgi-submit-url-btn.fgi-button-disabled,
+.fgi-submit-url-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	background-color: #f0f0f1;
+	border-color: #c3c4c7;
+	color: #646970;
+}
+
+.fgi-submit-url-btn.fgi-button-disabled:hover,
+.fgi-submit-url-btn:disabled:hover {
+	background-color: #f0f0f1;
+	border-color: #c3c4c7;
+	color: #646970;
+}
+
+/* Action wrapper for button and info text */
+.fgi-action-wrapper {
+	display: inline-block;
+	margin-right: 5px;
+}
+
+.fgi-submitted-info {
+	display: block;
+	font-size: 11px;
+	color: #646970;
+	margin-top: 2px;
+	font-style: italic;
 }
 
 /* Status column in post list */
