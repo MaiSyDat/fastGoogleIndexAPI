@@ -50,6 +50,18 @@
 				return;
 			}
 			
+			// Check if fgiAdmin is available.
+			if (typeof fgiAdmin === 'undefined') {
+				var errorDiv = $('<div class="notice notice-error inline"><p>Error: AJAX configuration not loaded. Please refresh the page.</p></div>');
+				btn.after(errorDiv);
+				setTimeout(function() {
+					errorDiv.fadeOut(300, function() {
+						$(this).remove();
+					});
+				}, 5000);
+				return;
+			}
+			
 			var postId = btn.data('post-id');
 			if (!postId) {
 				return;
@@ -60,7 +72,7 @@
 			// Find status cell - try multiple selectors for different contexts
 			var statusCell = row.find('td:has(.fgi-status-indexed), td:has(.fgi-status-not-indexed), td:has(.fgi-status-unknown), td.column-google_status').first();
 			
-			btn.prop('disabled', true).text(fgiAdmin.checkingText);
+			btn.prop('disabled', true).text(fgiAdmin.checkingText || 'Checking...');
 			
 			$.ajax({
 				url: fgiAdmin.ajaxUrl,
@@ -134,7 +146,7 @@
 						// Update button state
 						btn.prop('disabled', false).text(fgiAdmin.checkStatusText || 'Check Status');
 					} else {
-						var errorMsg = response.data && response.data.message ? response.data.message : fgiAdmin.errorText;
+						var errorMsg = response.data && response.data.message ? response.data.message : ((typeof fgiAdmin !== 'undefined' && fgiAdmin.errorText) ? fgiAdmin.errorText : 'An error occurred.');
 						var errorDiv = $('<div class="notice notice-error inline fgi-notice"><p>' + errorMsg + '</p></div>');
 						btn.after(errorDiv);
 						setTimeout(function() {
@@ -146,9 +158,15 @@
 					}
 				},
 				error: function(xhr, status, error) {
-					var errorMsg = fgiAdmin.requestFailedText;
+					var errorMsg = (typeof fgiAdmin !== 'undefined' && fgiAdmin.requestFailedText) ? fgiAdmin.requestFailedText : 'Request failed. Please try again.';
 					if (status === 'timeout') {
-						errorMsg = fgiAdmin.timeoutText;
+						errorMsg = (typeof fgiAdmin !== 'undefined' && fgiAdmin.timeoutText) ? fgiAdmin.timeoutText : 'Request timed out. Please try again.';
+					} else if (xhr.status === 0) {
+						errorMsg = 'Connection error. Please check your internet connection and try again.';
+					} else if (xhr.status === 403) {
+						errorMsg = 'Permission denied. Please refresh the page and try again.';
+					} else if (xhr.status === 500) {
+						errorMsg = 'Server error. Please try again later.';
 					}
 					var errorDiv = $('<div class="notice notice-error inline fgi-notice"><p>' + errorMsg + '</p></div>');
 					btn.after(errorDiv);
@@ -172,6 +190,18 @@
 				return;
 			}
 			
+			// Check if fgiAdmin is available.
+			if (typeof fgiAdmin === 'undefined') {
+				var errorDiv = $('<div class="notice notice-error inline"><p>Error: AJAX configuration not loaded. Please refresh the page.</p></div>');
+				btn.after(errorDiv);
+				setTimeout(function() {
+					errorDiv.fadeOut(300, function() {
+						$(this).remove();
+					});
+				}, 5000);
+				return;
+			}
+			
 			var postId = btn.data('post-id');
 			var actionType = btn.data('action-type') || 'URL_UPDATED';
 			if (!postId) {
@@ -183,7 +213,7 @@
 			var statusCell = row.find('td:has(.fgi-status-indexed), td:has(.fgi-status-not-indexed), td:has(.fgi-status-unknown)').first();
 			var lastCheckedCell = row.find('td').eq(4); // Last Checked column
 			
-			btn.prop('disabled', true).text(fgiAdmin.submittingText);
+			btn.prop('disabled', true).text(fgiAdmin.submittingText || 'Submitting...');
 			
 			$.ajax({
 				url: fgiAdmin.ajaxUrl,
@@ -238,7 +268,7 @@
 							window.location.reload();
 						}, 2000);
 					} else {
-						var errorMsg = response.data && response.data.message ? response.data.message : fgiAdmin.errorText;
+						var errorMsg = response.data && response.data.message ? response.data.message : ((typeof fgiAdmin !== 'undefined' && fgiAdmin.errorText) ? fgiAdmin.errorText : 'An error occurred.');
 						var errorDiv = $('<div class="notice notice-error inline fgi-notice"><p>' + errorMsg + '</p></div>');
 						btn.after(errorDiv);
 						setTimeout(function() {
@@ -250,9 +280,15 @@
 					}
 				},
 				error: function(xhr, status, error) {
-					var errorMsg = fgiAdmin.requestFailedText;
+					var errorMsg = (typeof fgiAdmin !== 'undefined' && fgiAdmin.requestFailedText) ? fgiAdmin.requestFailedText : 'Request failed. Please try again.';
 					if (status === 'timeout') {
-						errorMsg = fgiAdmin.timeoutText;
+						errorMsg = (typeof fgiAdmin !== 'undefined' && fgiAdmin.timeoutText) ? fgiAdmin.timeoutText : 'Request timed out. Please try again.';
+					} else if (xhr.status === 0) {
+						errorMsg = 'Connection error. Please check your internet connection and try again.';
+					} else if (xhr.status === 403) {
+						errorMsg = 'Permission denied. Please refresh the page and try again.';
+					} else if (xhr.status === 500) {
+						errorMsg = 'Server error. Please try again later.';
 					}
 					var errorDiv = $('<div class="notice notice-error inline fgi-notice"><p>' + errorMsg + '</p></div>');
 					btn.after(errorDiv);

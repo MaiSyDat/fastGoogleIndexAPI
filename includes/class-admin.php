@@ -78,9 +78,6 @@ class Admin {
 		add_filter( 'handle_bulk_actions-edit-post', array( $this, 'handle_bulk_action' ), 10, 3 );
 		add_filter( 'handle_bulk_actions-edit-page', array( $this, 'handle_bulk_action' ), 10, 3 );
 
-		// Google Status column removed - only show in Console Results page.
-		// add_action( 'init', array( $this, 'register_post_list_hooks' ), 20 );
-
 		// AJAX handlers.
 		add_action( 'wp_ajax_fgi_check_status', array( $this, 'ajax_check_status' ) );
 		add_action( 'wp_ajax_fgi_submit_url', array( $this, 'ajax_submit_url' ) );
@@ -1492,25 +1489,23 @@ class Admin {
 				true
 			);
 
-			// Localize script for AJAX functionality (only on results page).
-			if ( 'google-indexing_page_fast-google-indexing-api-results' === $hook ) {
-				wp_localize_script(
-					'fast-google-indexing-admin',
-					'fgiAdmin',
-					array(
-						'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
-						'checkStatusNonce' => wp_create_nonce( 'fgi_check_status' ),
-						'submitUrlNonce' => wp_create_nonce( 'fgi_submit_url' ),
-						'checkingText'   => __( 'Checking...', 'fast-google-indexing-api' ),
-						'submittingText' => __( 'Submitting...', 'fast-google-indexing-api' ),
-						'errorText'      => __( 'An error occurred.', 'fast-google-indexing-api' ),
-						'requestFailedText' => __( 'Request failed. Please try again.', 'fast-google-indexing-api' ),
-						'timeoutText'    => __( 'Request timed out. Please try again.', 'fast-google-indexing-api' ),
-						'indexedText'    => __( 'Indexed', 'fast-google-indexing-api' ),
-						'notIndexedText' => __( 'Not Indexed', 'fast-google-indexing-api' ),
-					)
-				);
-			}
+			// Localize script for AJAX functionality (always localize when script is enqueued).
+			wp_localize_script(
+				'fast-google-indexing-admin',
+				'fgiAdmin',
+				array(
+					'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
+					'checkStatusNonce' => wp_create_nonce( 'fgi_check_status' ),
+					'submitUrlNonce' => wp_create_nonce( 'fgi_submit_url' ),
+					'checkingText'   => __( 'Checking...', 'fast-google-indexing-api' ),
+					'submittingText' => __( 'Submitting...', 'fast-google-indexing-api' ),
+					'errorText'      => __( 'An error occurred.', 'fast-google-indexing-api' ),
+					'requestFailedText' => __( 'Request failed. Please try again.', 'fast-google-indexing-api' ),
+					'timeoutText'    => __( 'Request timed out. Please try again.', 'fast-google-indexing-api' ),
+					'indexedText'    => __( 'Indexed', 'fast-google-indexing-api' ),
+					'notIndexedText' => __( 'Not Indexed', 'fast-google-indexing-api' ),
+				)
+			);
 		}
 	}
 
