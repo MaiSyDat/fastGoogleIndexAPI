@@ -129,18 +129,24 @@
 	color: #646970;
 }
 
-/* Action wrapper for button and info text */
-.fgi-action-wrapper {
-	display: inline-block;
-	margin-right: 5px;
+/* Actions container */
+.fgi-actions-container {
+	display: block;
+}
+
+.fgi-buttons-row {
+	display: flex;
+	gap: 5px;
+	align-items: center;
 }
 
 .fgi-submitted-info {
 	display: block;
 	font-size: 11px;
 	color: #646970;
-	margin-top: 2px;
+	margin-top: 4px;
 	font-style: italic;
+	line-height: 1.4;
 }
 
 /* Status column in post list */

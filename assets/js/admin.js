@@ -248,10 +248,10 @@
 						
 						// Disable button and show "Submitted X hours ago" message
 						btn.addClass('fgi-button-disabled').prop('disabled', true);
-						var actionWrapper = btn.closest('.fgi-action-wrapper');
-						if (actionWrapper.length) {
+						var actionsContainer = btn.closest('.fgi-actions-container');
+						if (actionsContainer.length && !actionsContainer.find('.fgi-submitted-info').length) {
 							var submittedInfo = $('<span class="fgi-submitted-info">Submitted 0 hours ago</span>');
-							actionWrapper.append(submittedInfo);
+							actionsContainer.append(submittedInfo);
 						}
 						
 						// Show success message

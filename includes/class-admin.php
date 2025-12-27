@@ -872,16 +872,25 @@ class Admin {
 									</td>
 									<td>
 										<?php if ( $permalink ) : ?>
-											<div class="fgi-action-wrapper">
-												<button 
-													type="button" 
-													class="button button-small fgi-submit-url-btn fgi-action-buttons <?php echo $is_button_disabled ? 'fgi-button-disabled' : ''; ?>" 
-													data-post-id="<?php echo esc_attr( $post->ID ); ?>"
-													data-action-type="URL_UPDATED"
-													<?php echo $is_button_disabled ? 'disabled' : ''; ?>
-												>
-													<?php esc_html_e( 'Index Now', 'fast-google-indexing-api' ); ?>
-												</button>
+											<div class="fgi-actions-container">
+												<div class="fgi-buttons-row">
+													<button 
+														type="button" 
+														class="button button-small fgi-submit-url-btn fgi-action-buttons <?php echo $is_button_disabled ? 'fgi-button-disabled' : ''; ?>" 
+														data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+														data-action-type="URL_UPDATED"
+														<?php echo $is_button_disabled ? 'disabled' : ''; ?>
+													>
+														<?php esc_html_e( 'Index Now', 'fast-google-indexing-api' ); ?>
+													</button>
+													<button 
+														type="button" 
+														class="button button-small fgi-check-status-btn fgi-action-buttons" 
+														data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+													>
+														<?php esc_html_e( 'Check Status', 'fast-google-indexing-api' ); ?>
+													</button>
+												</div>
 												<?php if ( $is_button_disabled && $submitted_hours_ago ) : ?>
 													<span class="fgi-submitted-info">
 														<?php
@@ -894,13 +903,6 @@ class Admin {
 													</span>
 												<?php endif; ?>
 											</div>
-											<button 
-												type="button" 
-												class="button button-small fgi-check-status-btn fgi-action-buttons" 
-												data-post-id="<?php echo esc_attr( $post->ID ); ?>"
-											>
-												<?php esc_html_e( 'Check Status', 'fast-google-indexing-api' ); ?>
-											</button>
 										<?php endif; ?>
 									</td>
 								</tr>
