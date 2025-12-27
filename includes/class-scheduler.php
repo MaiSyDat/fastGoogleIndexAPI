@@ -151,24 +151,19 @@ class Scheduler {
 		}
 
 		// Query posts that need checking.
-		// Priority: 1) Posts with status (to re-check), 2) Posts never checked.
-		// First, get posts that have status (prioritize indexed ones to verify they're still indexed).
+		// Priority: 1) New posts (never checked), 2) Old posts (to re-check).
+		// First, get posts that have never been checked.
 		$args = array(
 			'post_type'      => $enabled_post_types,
 			'post_status'    => 'publish',
 			'posts_per_page' => $batch_size,
 			'fields'         => 'ids',
-			'orderby'        => 'meta_value_num',
-			'meta_key'       => '_fgi_last_checked',
-			'order'          => 'ASC',
+			'orderby'        => 'date',
+			'order'          => 'DESC',
 			'meta_query'     => array(
 				array(
-					'key'     => '_fgi_google_status',
-					'compare' => 'EXISTS',
-				),
-				array(
 					'key'     => '_fgi_last_checked',
-					'compare' => 'EXISTS',
+					'compare' => 'NOT EXISTS',
 				),
 			),
 			'update_post_meta_cache' => false,
@@ -178,7 +173,7 @@ class Scheduler {
 		$query = new \WP_Query( $args );
 		$posts = $query->posts;
 
-		// If we don't have enough posts, get posts that have never been checked.
+		// If we don't have enough posts, get posts that have already been checked (to re-check oldest first).
 		if ( count( $posts ) < $batch_size ) {
 			$remaining = $batch_size - count( $posts );
 			$args = array(
@@ -186,12 +181,13 @@ class Scheduler {
 				'post_status'    => 'publish',
 				'posts_per_page' => $remaining,
 				'fields'         => 'ids',
-				'orderby'        => 'date',
-				'order'          => 'DESC',
+				'orderby'        => 'meta_value_num',
+				'meta_key'       => '_fgi_last_checked',
+				'order'          => 'ASC',
 				'meta_query'     => array(
 					array(
 						'key'     => '_fgi_last_checked',
-						'compare' => 'NOT EXISTS',
+						'compare' => 'EXISTS',
 					),
 				),
 				'update_post_meta_cache' => false,
