@@ -1,186 +1,206 @@
 /**
  * Admin CSS for Fast Google Indexing API
+ * Scoped to plugin pages only to prevent conflicts
  *
  * @package FastGoogleIndexing
  */
 
-/* Status Icons */
-.fgi-status-indexed {
-	color: #00a32a;
+/* Scope all styles to plugin admin pages and post screens */
+body.toplevel_page_fast-google-indexing-api,
+body.google-indexing_page_fast-google-indexing-api-logs,
+body.google-indexing_page_fast-google-indexing-api-results,
+body.post-php,
+body.post-new-php,
+body.edit-php {
+
+	/* Status Icons */
+	.fgi-status-indexed {
+		color: #00a32a;
+	}
+
+	.fgi-status-not-indexed {
+		color: #d63638;
+	}
+
+	.fgi-status-unknown {
+		color: #646970;
+	}
+
+	.fgi-status-unknown .dashicons-clock {
+		color: #f0b849; /* Orange/Yellow for pending */
+	}
+
+	/* Status Badges */
+	.fgi-status-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 8px;
+		border-radius: 3px;
+		font-size: 12px;
+		font-weight: 500;
+		line-height: 1.4;
+	}
+
+	.fgi-status-badge .dashicons {
+		font-size: 16px;
+		width: 16px;
+		height: 16px;
+		line-height: 1;
+	}
+
+	.fgi-status-badge-green {
+		background-color: #d4edda;
+		color: #155724;
+		border: 1px solid #c3e6cb;
+	}
+
+	.fgi-status-badge-green .dashicons {
+		color: #00a32a;
+	}
+
+	.fgi-status-badge-orange {
+		background-color: #fff3cd;
+		color: #856404;
+		border: 1px solid #ffeaa7;
+	}
+
+	.fgi-status-badge-orange .dashicons {
+		color: #f0b849;
+	}
+
+	.fgi-status-badge-gray {
+		background-color: #e9ecef;
+		color: #495057;
+		border: 1px solid #dee2e6;
+	}
+
+	.fgi-status-badge-gray .dashicons {
+		color: #646970;
+	}
+
+	/* Status colors in logs table */
+	.fgi-status-code-success {
+		color: #00a32a;
+	}
+
+	.fgi-status-code-error {
+		color: #d63638;
+	}
+
+	.fgi-text-muted {
+		color: #999;
+	}
+
+	/* Post type filter */
+	.fgi-post-type-filter {
+		margin: 20px 0;
+	}
+
+	.fgi-post-type-filter label {
+		font-weight: 600;
+	}
+
+	/* Auto-scan toggle row */
+	#scan_speed_row {
+		transition: opacity 0.2s ease-in-out;
+	}
+
+	#scan_speed_row.fgi-hidden {
+		display: none !important;
+	}
+
+	/* Check status button */
+	.fgi-check-status-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	/* Disabled Index Now button */
+	.fgi-submit-url-btn.fgi-button-disabled,
+	.fgi-submit-url-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		background-color: #f0f0f1;
+		border-color: #c3c4c7;
+		color: #646970;
+	}
+
+	.fgi-submit-url-btn.fgi-button-disabled:hover,
+	.fgi-submit-url-btn:disabled:hover {
+		background-color: #f0f0f1;
+		border-color: #c3c4c7;
+		color: #646970;
+	}
+
+	/* Actions container */
+	.fgi-actions-container {
+		display: block;
+	}
+
+	.fgi-buttons-row {
+		display: flex;
+		gap: 5px;
+		align-items: center;
+	}
+
+	.fgi-submitted-info {
+		display: block;
+		font-size: 11px;
+		color: #646970;
+		margin-top: 4px;
+		font-style: italic;
+		line-height: 1.4;
+	}
+
+	/* Status column in post list */
+	.column-google_status {
+		width: 120px;
+	}
+
+	.column-google_status .dashicons {
+		font-size: 20px;
+		width: 20px;
+		height: 20px;
+	}
+
+	/* Logs page */
+	.fgi-logs-form {
+		margin-bottom: 20px;
+	}
+
+	/* Action buttons spacing */
+	.fgi-action-buttons .button {
+		margin-top: 5px;
+	}
 }
 
-.fgi-status-not-indexed {
-	color: #d63638;
-}
-
-.fgi-status-unknown {
-	color: #646970;
-}
-
-.fgi-status-unknown .dashicons-clock {
-	color: #f0b849; /* Orange/Yellow for pending */
-}
-
-/* Status Badges */
-.fgi-status-badge {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	padding: 4px 8px;
-	border-radius: 3px;
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 1.4;
-}
-
-.fgi-status-badge .dashicons {
-	font-size: 16px;
-	width: 16px;
-	height: 16px;
-	line-height: 1;
-}
-
-.fgi-status-badge-green {
-	background-color: #d4edda;
-	color: #155724;
-	border: 1px solid #c3e6cb;
-}
-
-.fgi-status-badge-green .dashicons {
-	color: #00a32a;
-}
-
-.fgi-status-badge-orange {
-	background-color: #fff3cd;
-	color: #856404;
-	border: 1px solid #ffeaa7;
-}
-
-.fgi-status-badge-orange .dashicons {
-	color: #f0b849;
-}
-
-.fgi-status-badge-gray {
-	background-color: #e9ecef;
-	color: #495057;
-	border: 1px solid #dee2e6;
-}
-
-.fgi-status-badge-gray .dashicons {
-	color: #646970;
-}
-
-/* Status colors in logs table */
-.fgi-status-code-success {
-	color: #00a32a;
-}
-
-.fgi-status-code-error {
-	color: #d63638;
-}
-
-.fgi-text-muted {
-	color: #999;
-}
-
-/* Inline notices */
-.notice.inline {
+/* Inline notices - scoped to plugin pages only */
+body.toplevel_page_fast-google-indexing-api .notice.inline,
+body.google-indexing_page_fast-google-indexing-api-logs .notice.inline,
+body.google-indexing_page_fast-google-indexing-api-results .notice.inline {
 	margin: 5px 0;
 }
 
-/* Post type filter */
-.fgi-post-type-filter {
-	margin: 20px 0;
-}
-
-.fgi-post-type-filter label {
-	font-weight: 600;
-}
-
-/* Auto-scan toggle row */
-#scan_speed_row {
-	transition: opacity 0.2s ease-in-out;
-}
-
-#scan_speed_row.fgi-hidden {
-	display: none !important;
-}
-
-/* Check status button */
-.fgi-check-status-btn:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-}
-
-/* Disabled Index Now button */
-.fgi-submit-url-btn.fgi-button-disabled,
-.fgi-submit-url-btn:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-	background-color: #f0f0f1;
-	border-color: #c3c4c7;
-	color: #646970;
-}
-
-.fgi-submit-url-btn.fgi-button-disabled:hover,
-.fgi-submit-url-btn:disabled:hover {
-	background-color: #f0f0f1;
-	border-color: #c3c4c7;
-	color: #646970;
-}
-
-/* Actions container */
-.fgi-actions-container {
-	display: block;
-}
-
-.fgi-buttons-row {
-	display: flex;
-	gap: 5px;
-	align-items: center;
-}
-
-.fgi-submitted-info {
-	display: block;
-	font-size: 11px;
-	color: #646970;
-	margin-top: 4px;
-	font-style: italic;
-	line-height: 1.4;
-}
-
-/* Status column in post list */
-.column-google_status {
-	width: 120px;
-}
-
-.column-google_status .dashicons {
-	font-size: 20px;
-	width: 20px;
-	height: 20px;
-}
-
-/* Logs page */
-.fgi-logs-form {
-	margin-bottom: 20px;
-}
-
-/* Action buttons spacing */
-.fgi-action-buttons .button {
-	margin-top: 5px;
-}
-
-/* Pagination styles */
-.tablenav-pages {
+/* Pagination styles - scoped to plugin pages only */
+body.toplevel_page_fast-google-indexing-api .tablenav-pages,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages {
 	margin: 10px 0;
 }
 
-.tablenav-pages .pagination-links {
+body.toplevel_page_fast-google-indexing-api .tablenav-pages .pagination-links,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages .pagination-links,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages .pagination-links {
 	display: inline-block;
 }
 
-.tablenav-pages a,
-.tablenav-pages span {
+body.toplevel_page_fast-google-indexing-api .tablenav-pages a,
+body.toplevel_page_fast-google-indexing-api .tablenav-pages span,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages a,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages span,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages a,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages span {
 	display: inline-block;
 	padding: 6px 12px;
 	margin: 0 2px;
@@ -192,28 +212,38 @@
 	transition: all 0.2s ease;
 }
 
-.tablenav-pages a:hover {
+body.toplevel_page_fast-google-indexing-api .tablenav-pages a:hover,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages a:hover,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages a:hover {
 	background: #f0f0f1;
 	border-color: #8c8f94;
 	color: #135e96;
 }
 
-.tablenav-pages .current {
+body.toplevel_page_fast-google-indexing-api .tablenav-pages .current,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages .current,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages .current {
 	background: #2271b1;
 	color: #fff;
 	border-color: #2271b1;
 	font-weight: 600;
 }
 
-.tablenav-pages .disabled,
-.tablenav-pages .disabled:hover {
+body.toplevel_page_fast-google-indexing-api .tablenav-pages .disabled,
+body.toplevel_page_fast-google-indexing-api .tablenav-pages .disabled:hover,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages .disabled,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages .disabled:hover,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages .disabled,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages .disabled:hover {
 	color: #c3c4c7;
 	background: #f6f7f7;
 	border-color: #dcdcde;
 	cursor: default;
 }
 
-.tablenav-pages .pagination-links .page-numbers {
+body.toplevel_page_fast-google-indexing-api .tablenav-pages .pagination-links .page-numbers,
+body.google-indexing_page_fast-google-indexing-api-logs .tablenav-pages .pagination-links .page-numbers,
+body.google-indexing_page_fast-google-indexing-api-results .tablenav-pages .pagination-links .page-numbers {
 	min-width: 32px;
 	text-align: center;
 }
