@@ -323,8 +323,8 @@ class Indexer {
 		// First, try to get from settings.
 		$site_url = get_option( 'fast_google_indexing_site_url', '' );
 		if ( ! empty( $site_url ) ) {
-			// Ensure trailing slash for settings URL too.
-			$cached_url = untrailingslashit( $site_url ) . '/';
+			// Return exactly as user entered (no automatic trailing slash).
+			$cached_url = $site_url;
 			return $cached_url;
 		}
 
@@ -333,7 +333,7 @@ class Indexer {
 		$parsed   = wp_parse_url( $home_url );
 		if ( isset( $parsed['scheme'] ) && isset( $parsed['host'] ) ) {
 			$detected_url = $parsed['scheme'] . '://' . $parsed['host'];
-			// Force append trailing slash to match Google Search Console standards.
+			// Default: append trailing slash for auto-detected URL.
 			$cached_url = untrailingslashit( $detected_url ) . '/';
 			return $cached_url;
 		}
