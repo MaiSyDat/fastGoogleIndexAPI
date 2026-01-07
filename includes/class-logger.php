@@ -293,16 +293,16 @@ class Logger {
 	/**
 	 * Clean up old logs older than specified days.
 	 *
-	 * @param int $days Number of days to keep logs (default: 30).
+	 * @param int $days Number of days to keep logs (default: 7).
 	 * @return int Number of logs deleted.
 	 */
-	public function cleanup_old_logs( $days = 30 ) {
+	public function cleanup_old_logs( $days = 7 ) {
 		global $wpdb;
 
 		// Validate days parameter.
 		$days = absint( $days );
 		if ( $days < 1 ) {
-			$days = 30; // Default to 30 days if invalid.
+			$days = 7; // Default to 7 days if invalid.
 		}
 
 		// Delete logs older than specified days.

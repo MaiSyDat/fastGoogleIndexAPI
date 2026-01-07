@@ -119,8 +119,8 @@ class Scheduler {
 	 * @return void
 	 */
 	public function run_log_cleanup() {
-		// Clean up logs older than 30 days.
-		$this->logger->cleanup_old_logs( 30 );
+		// Clean up logs older than 7 days.
+		$this->logger->cleanup_old_logs( 7 );
 	}
 
 	/**
@@ -234,8 +234,6 @@ class Scheduler {
 		switch ( $speed ) {
 			case 'slow':
 				return 20;
-			case 'fast':
-				return 100;
 			case 'medium':
 			default:
 				return 50;

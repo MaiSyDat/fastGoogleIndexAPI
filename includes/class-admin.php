@@ -270,15 +270,9 @@ class Admin {
 									<option value="medium" <?php selected( $scan_speed, 'medium' ); ?>>
 										<?php esc_html_e( 'Medium (50 posts/hour)', 'fast-google-indexing-api' ); ?>
 									</option>
-									<option value="fast" <?php selected( $scan_speed, 'fast' ); ?>>
-										<?php esc_html_e( 'Fast (100 posts/hour)', 'fast-google-indexing-api' ); ?>
-									</option>
 								</select>
 								<p class="description">
-									<?php esc_html_e( 'Number of posts to check per hour during automated scanning. Slower speeds reduce API quota usage.', 'fast-google-indexing-api' ); ?>
-								</p>
-								<p class="description" style="color: #d63638; font-weight: 600;">
-									<?php esc_html_e( 'Note: Google Inspection API has a limit of approximately 2,000 requests per day. Please consider this when selecting Fast speed (100 posts/hour) as it may exceed this limit.', 'fast-google-indexing-api' ); ?>
+									<?php esc_html_e( 'Number of posts to check per hour during automated scanning. Slower speeds reduce API quota usage and help stay within Google Inspection API limits.', 'fast-google-indexing-api' ); ?>
 								</p>
 							</td>
 						</tr>
@@ -997,7 +991,7 @@ class Admin {
 		// Save scan speed.
 		if ( isset( $_POST['scan_speed'] ) ) {
 			$scan_speed = sanitize_text_field( wp_unslash( $_POST['scan_speed'] ) );
-			if ( in_array( $scan_speed, array( 'slow', 'medium', 'fast' ), true ) ) {
+			if ( in_array( $scan_speed, array( 'slow', 'medium' ), true ) ) {
 				update_option( 'fast_google_indexing_scan_speed', $scan_speed );
 			}
 		}

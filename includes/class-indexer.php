@@ -212,7 +212,7 @@ class Indexer {
 					'Content-Type'  => 'application/json',
 				),
 				'body'    => wp_json_encode( $body ),
-				'timeout' => 30,
+				'timeout' => 60,
 			)
 		);
 
@@ -364,7 +364,7 @@ class Indexer {
 					'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
 					'assertion'  => $jwt,
 				),
-				'timeout' => 30,
+				'timeout' => 60,
 			)
 		);
 
@@ -495,7 +495,7 @@ class Indexer {
 					'Content-Type'  => 'application/json',
 				),
 				'body'    => wp_json_encode( $body ),
-				'timeout' => 30,
+				'timeout' => 60,
 			)
 		);
 
